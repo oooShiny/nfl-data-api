@@ -1,0 +1,31 @@
+# Data layers (large parquet + DuckDB warehouse, ~1.4GB — rebuildable via `nfl run`)
+/data/
+
+# Virtual environment
+/.venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Testing / coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.mypy_cache/
+.ruff_cache/
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
