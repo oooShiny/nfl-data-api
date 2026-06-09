@@ -649,6 +649,31 @@ def load_ref_trades(con: duckdb.DuckDBPyConnection) -> None:
     console.print(f"  [green]✓[/green] ref_trades: {n:,} rows")
 
 
+# ── Name resolution back-fill ────────────────────────────────────────────────
+
+def apply_name_resolution(con: duckdb.DuckDBPyConnection) -> None:
+    """Back-fill player ID columns in ref tables using resolved name_resolution data."""
+    updates = [
+        ("ref_combine",     "player_id", "player_name", "ref_combine"),
+        ("ref_contracts",   "player_id", "player_name", "ref_contracts"),
+        ("ref_draft_picks", "gsis_id",   "player_name", "ref_draft_picks"),
+        # ref_trades has no gsis_id column — would need a schema change to support
+    ]
+    for table, id_col, name_col, source in updates:
+        result = con.execute(f"""
+            UPDATE {table} t
+            SET {id_col} = nr.resolved_gsis_id
+            FROM name_resolution nr
+            WHERE t.{name_col} = nr.raw_name
+              AND nr.source = '{source}'
+              AND nr.resolved_gsis_id IS NOT NULL
+              AND t.{id_col} IS NULL
+        """)
+        n = con.execute(f"SELECT COUNT(*) FROM {table} WHERE {id_col} IS NOT NULL").fetchone()[0]
+        total = con.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+        console.print(f"  [green]✓[/green] {table}.{id_col}: {n:,} / {total:,} resolved")
+
+
 # ── Main orchestrator ────────────────────────────────────────────────────────
 
 LOADERS = [

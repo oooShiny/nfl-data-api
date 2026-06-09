@@ -194,6 +194,22 @@ def resolve(
 
 
 @app.command()
+def enrich():
+    """Back-fill player IDs in ref tables using resolved name_resolution data."""
+    from pipeline.config import GOLD_DB
+    from pipeline.gold.loader import get_connection, apply_name_resolution
+
+    if not GOLD_DB.exists():
+        console.print("[red]Database not found. Run `nfl load` first.[/red]")
+        raise typer.Exit(1)
+
+    con = get_connection()
+    console.print("[bold]Applying name resolution to ref tables[/bold]")
+    apply_name_resolution(con)
+    con.close()
+
+
+@app.command()
 def review(
     source: Annotated[str | None, typer.Option("--source", "-s", help="Filter by source table")] = None,
     limit: Annotated[int, typer.Option("--limit", "-n")] = 50,
