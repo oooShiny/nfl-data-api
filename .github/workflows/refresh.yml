@@ -101,35 +101,36 @@ jobs:
               if prev_n is not None and curr is not None:
                   diff = curr - prev_n
                   sign = "+" if diff >= 0 else ""
-                  delta_rows.append(f"  {table:<30} {curr:>10,}  ({sign}{diff:,})")
+                  delta_rows.append("  " + table.ljust(30) + " " + str(curr).rjust(10) + "  (" + sign + str(diff) + ")")
               else:
-                  delta_rows.append(f"  {table:<30} {str(curr or '—'):>10}")
+                  delta_rows.append("  " + table.ljust(30) + " " + str(curr or "—").rjust(10))
 
           unmatched = report["unmatched_players"]
           unmatched_lines = "\n".join(
-              f"  - {u['raw_name']} ({u['source']}, {u['method']})"
+              "  - " + u["raw_name"] + " (" + u["source"] + ", " + u["method"] + ")"
               for u in unmatched[:50]
           )
           if len(unmatched) > 50:
-              unmatched_lines += f"\n  ... and {len(unmatched) - 50} more"
+              unmatched_lines += "\n  ... and " + str(len(unmatched) - 50) + " more"
 
-          body = f"""NFL Data Refresh Complete — {report['run_at'][:10]}
-
-ROW COUNT CHANGES
-{chr(10).join(delta_rows)}
-
-UNMATCHED PLAYERS ({report['unmatched_count']} total)
-{unmatched_lines or '  None'}
-
-NFL CHECK OUTPUT
-{check_out[:3000]}
-"""
+          body = "\n".join([
+              "NFL Data Refresh Complete — " + report["run_at"][:10],
+              "",
+              "ROW COUNT CHANGES",
+              "\n".join(delta_rows),
+              "",
+              "UNMATCHED PLAYERS (" + str(report["unmatched_count"]) + " total)",
+              unmatched_lines or "  None",
+              "",
+              "NFL CHECK OUTPUT",
+              check_out[:3000],
+          ])
 
           resend.api_key = os.environ["RESEND_API_KEY"]
           params = resend.Emails.SendParams(
               from_="nfl-pipeline@" + os.environ["RESEND_DOMAIN"],
               to=["arbrown83@gmail.com"],
-              subject=f"NFL Refresh complete — {report['run_at'][:10]}",
+              subject="NFL Refresh complete — " + report["run_at"][:10],
               text=body,
           )
           resend.Emails.send(params)
