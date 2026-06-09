@@ -1,5 +1,6 @@
 # Data layers (large parquet + DuckDB warehouse, ~1.4GB — rebuildable via `nfl run`)
 /data/
+!data/last_run_counts.json
 
 # Virtual environment
 /.venv/

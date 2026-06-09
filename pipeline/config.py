@@ -5,6 +5,7 @@ DATA_DIR = REPO_ROOT / "data"
 BRONZE_DIR = DATA_DIR / "bronze"
 SILVER_DIR = DATA_DIR / "silver"
 GOLD_DB = DATA_DIR / "nfl.duckdb"
+LAST_RUN_COUNTS_FILE = DATA_DIR / "last_run_counts.json"
 
 NFLVERSE_REPO = "nflverse/nflverse-data"
 NFLVERSE_RELEASES_URL = "https://github.com/nflverse/nflverse-data/releases/download"

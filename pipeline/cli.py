@@ -487,3 +487,101 @@ def ai_review(
         console.print("[dim]Run `nfl ai-review` (no flags) to process all pending rows.[/dim]")
     elif dry_run:
         console.print("\n[dim]Dry run — no changes written. Re-run without --dry-run to apply.[/dim]")
+
+
+@app.command()
+def report(
+    format: Annotated[str, typer.Option("--format", "-f", help="Output format: json or table")] = "table",
+    output: Annotated[str | None, typer.Option("--output", "-o", help="Write output to this file path")] = None,
+):
+    """Generate a data quality and pipeline report: row counts, resolution stats, unmatched players."""
+    import json as _json
+    from datetime import datetime, timezone
+    from pathlib import Path
+    import duckdb as _duckdb
+    from rich.table import Table as RichTable
+    from pipeline.config import GOLD_DB, LAST_RUN_COUNTS_FILE
+
+    if not GOLD_DB.exists():
+        console.print("[red]Database not found. Run `nfl load` first.[/red]")
+        raise typer.Exit(1)
+
+    con = _duckdb.connect(str(GOLD_DB), read_only=True)
+
+    gold_tables = [
+        "dim_players", "dim_teams", "dim_games",
+        "fact_plays", "fact_pass_plays", "fact_rush_plays", "fact_kick_plays",
+        "fact_player_game_stats", "fact_weekly_rosters", "fact_rosters",
+        "fact_snap_counts", "fact_depth_charts", "fact_injuries",
+        "ref_combine", "ref_contracts", "ref_draft_picks", "ref_trades",
+        "name_resolution",
+    ]
+
+    row_counts: dict[str, int | None] = {}
+    for t in gold_tables:
+        try:
+            row_counts[t] = con.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
+        except Exception:
+            row_counts[t] = None
+
+    resolution_methods: dict[str, int] = {}
+    for row in con.execute(
+        "SELECT method, COUNT(*) FROM name_resolution GROUP BY method ORDER BY method"
+    ).fetchall():
+        resolution_methods[row[0]] = row[1]
+
+    unmatched = con.execute("""
+        SELECT raw_name, source, method
+        FROM name_resolution
+        WHERE method IN ('rejected', 'llm_rejected')
+        ORDER BY source, raw_name
+    """).fetchall()
+    unmatched_list = [{"raw_name": r[0], "source": r[1], "method": r[2]} for r in unmatched]
+
+    con.close()
+
+    run_at = datetime.now(timezone.utc).isoformat()
+    report_data = {
+        "run_at": run_at,
+        "row_counts": row_counts,
+        "resolution_methods": resolution_methods,
+        "unmatched_players": unmatched_list,
+        "unmatched_count": len(unmatched_list),
+    }
+
+    if format == "json":
+        out = _json.dumps(report_data, indent=2, default=str)
+        if output:
+            Path(output).write_text(out)
+        else:
+            console.print(out)
+        # Atomically update last_run_counts.json (CI side effect)
+        counts_snapshot = {"run_at": run_at, "row_counts": row_counts, "resolution_methods": resolution_methods}
+        tmp = LAST_RUN_COUNTS_FILE.with_suffix(".json.tmp")
+        tmp.write_text(_json.dumps(counts_snapshot, indent=2, default=str))
+        tmp.rename(LAST_RUN_COUNTS_FILE)
+    else:
+        count_table = RichTable(title="Gold Layer Row Counts")
+        count_table.add_column("Table", style="bold")
+        count_table.add_column("Rows", justify="right")
+        for t, n in row_counts.items():
+            count_table.add_row(t, f"{n:,}" if n is not None else "[dim]—[/dim]")
+        console.print(count_table)
+
+        res_table = RichTable(title="Name Resolution Methods")
+        res_table.add_column("Method", style="bold")
+        res_table.add_column("Count", justify="right")
+        for method, count in resolution_methods.items():
+            res_table.add_row(method, f"{count:,}")
+        console.print(res_table)
+
+        um_table = RichTable(title=f"Unmatched Players ({len(unmatched_list)})")
+        um_table.add_column("Raw Name")
+        um_table.add_column("Source")
+        um_table.add_column("Method")
+        for u in unmatched_list[:100]:
+            um_table.add_row(u["raw_name"], u["source"], u["method"])
+        console.print(um_table)
+
+        if output:
+            Path(output).write_text(_json.dumps(report_data, indent=2, default=str))

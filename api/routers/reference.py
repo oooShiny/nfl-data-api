@@ -1,0 +1,83 @@
+import duckdb
+from fastapi import APIRouter, Depends, Query, Request
+
+from api.deps import _build_filter, get_db
+from api.models.responses import CombineResult, Contract, DraftPick, PaginatedResponse
+
+router = APIRouter(tags=["reference"])
+
+
+@router.get("/combine", response_model=PaginatedResponse[CombineResult])
+def list_combine(
+    request: Request,
+    season: int | None = None,
+    position: str | None = None,
+    limit: int = Query(default=50, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
+    db: duckdb.DuckDBPyConnection = Depends(get_db),
+):
+    filters = [
+        ("season = ?", season),
+        ("pos = ?", position),
+    ]
+    where, params = _build_filter(filters)
+    total = db.execute(f"SELECT COUNT(*) FROM ref_combine {where}", params).fetchone()[0]
+    rows = db.execute(
+        f"SELECT * FROM ref_combine {where} ORDER BY season DESC, player_name LIMIT ? OFFSET ?",
+        params + [limit, offset],
+    ).fetchall()
+    cols = [d[0] for d in db.description]
+    data = [CombineResult.model_validate(dict(zip(cols, row))) for row in rows]
+    return PaginatedResponse(data=data, total=total, limit=limit, offset=offset)
+
+
+@router.get("/draft", response_model=PaginatedResponse[DraftPick])
+def list_draft(
+    request: Request,
+    season: int | None = None,
+    round: int | None = None,
+    team: str | None = None,
+    limit: int = Query(default=50, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
+    db: duckdb.DuckDBPyConnection = Depends(get_db),
+):
+    filters = [
+        ("season = ?", season),
+        ("round = ?", round),
+        ("team = ?", team),
+    ]
+    where, params = _build_filter(filters)
+    total = db.execute(f"SELECT COUNT(*) FROM ref_draft_picks {where}", params).fetchone()[0]
+    rows = db.execute(
+        f"SELECT * FROM ref_draft_picks {where} ORDER BY season DESC, round, pick LIMIT ? OFFSET ?",
+        params + [limit, offset],
+    ).fetchall()
+    cols = [d[0] for d in db.description]
+    data = [DraftPick.model_validate(dict(zip(cols, row))) for row in rows]
+    return PaginatedResponse(data=data, total=total, limit=limit, offset=offset)
+
+
+@router.get("/contracts", response_model=PaginatedResponse[Contract])
+def list_contracts(
+    request: Request,
+    team: str | None = None,
+    position: str | None = None,
+    year_signed: int | None = None,
+    limit: int = Query(default=50, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
+    db: duckdb.DuckDBPyConnection = Depends(get_db),
+):
+    filters = [
+        ("team = ?", team),
+        ("position = ?", position),
+        ("year_signed = ?", year_signed),
+    ]
+    where, params = _build_filter(filters)
+    total = db.execute(f"SELECT COUNT(*) FROM ref_contracts {where}", params).fetchone()[0]
+    rows = db.execute(
+        f"SELECT * FROM ref_contracts {where} ORDER BY year_signed DESC, apy DESC LIMIT ? OFFSET ?",
+        params + [limit, offset],
+    ).fetchall()
+    cols = [d[0] for d in db.description]
+    data = [Contract.model_validate(dict(zip(cols, row))) for row in rows]
+    return PaginatedResponse(data=data, total=total, limit=limit, offset=offset)
