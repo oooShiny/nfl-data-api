@@ -7,7 +7,10 @@ from pipeline.config import GOLD_DB
 def get_read_only_connection() -> duckdb.DuckDBPyConnection | None:
     if not GOLD_DB.exists():
         return None
-    return duckdb.connect(str(GOLD_DB), read_only=True)
+    try:
+        return duckdb.connect(str(GOLD_DB), read_only=True)
+    except Exception:
+        return None
 
 
 def get_db(request: Request) -> duckdb.DuckDBPyConnection:
