@@ -24,6 +24,9 @@ htmlcov/
 .mypy_cache/
 .ruff_cache/
 
+# Review working files
+fuzzy_review_*.csv
+
 # Editors / OS
 .DS_Store
 .idea/
