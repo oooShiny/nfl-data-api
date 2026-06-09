@@ -391,11 +391,13 @@ CREATE TABLE IF NOT EXISTS ref_trades (
     received        VARCHAR,
     pfr_id          VARCHAR,
     pfr_name        VARCHAR,
+    gsis_id         VARCHAR,
     pick_season     SMALLINT,
     pick_round      SMALLINT,
     pick_number     SMALLINT,
     conditional     BOOLEAN
 );
+ALTER TABLE ref_trades ADD COLUMN IF NOT EXISTS gsis_id VARCHAR;
 
 -- ─────────────────────────────────────────────
 -- Name resolution lookup table

@@ -657,7 +657,7 @@ def apply_name_resolution(con: duckdb.DuckDBPyConnection) -> None:
         ("ref_combine",     "player_id", "player_name", "ref_combine"),
         ("ref_contracts",   "player_id", "player_name", "ref_contracts"),
         ("ref_draft_picks", "gsis_id",   "player_name", "ref_draft_picks"),
-        # ref_trades has no gsis_id column — would need a schema change to support
+        ("ref_trades",      "gsis_id",   "pfr_name",    "ref_trades"),
     ]
     for table, id_col, name_col, source in updates:
         result = con.execute(f"""

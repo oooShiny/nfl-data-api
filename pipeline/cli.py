@@ -116,6 +116,113 @@ def status():
 
 
 @app.command()
+def check():
+    """Show data quality report: row counts, null rates, and name resolution coverage."""
+    import duckdb as _duckdb
+    from pipeline.config import GOLD_DB
+
+    if not GOLD_DB.exists():
+        console.print("[red]Database not found. Run `nfl load` first.[/red]")
+        raise typer.Exit(1)
+
+    con = _duckdb.connect(str(GOLD_DB), read_only=True)
+
+    # ── Row counts ────────────────────────────────────────────────────────────
+    count_table = Table(title="Gold Layer Row Counts", show_header=True)
+    count_table.add_column("Table", style="bold")
+    count_table.add_column("Rows", justify="right")
+
+    gold_tables = [
+        "dim_players", "dim_teams", "dim_games",
+        "fact_plays", "fact_pass_plays", "fact_rush_plays", "fact_kick_plays",
+        "fact_player_game_stats", "fact_weekly_rosters", "fact_rosters",
+        "fact_snap_counts", "fact_depth_charts", "fact_injuries",
+        "ref_combine", "ref_contracts", "ref_draft_picks", "ref_trades",
+        "name_resolution",
+    ]
+    for t in gold_tables:
+        try:
+            n = con.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
+            count_table.add_row(t, f"{n:,}")
+        except Exception:
+            count_table.add_row(t, "[dim]—[/dim]")
+    console.print(count_table)
+
+    # ── Name resolution coverage ──────────────────────────────────────────────
+    res_table = Table(title="Name Resolution Coverage", show_header=True)
+    res_table.add_column("Table / Column", style="bold")
+    res_table.add_column("Resolved", justify="right")
+    res_table.add_column("Total", justify="right")
+    res_table.add_column("Pct", justify="right")
+
+    id_cols = [
+        ("ref_combine",     "player_id"),
+        ("ref_contracts",   "player_id"),
+        ("ref_draft_picks", "gsis_id"),
+        ("ref_trades",      "gsis_id"),
+    ]
+    for table, col in id_cols:
+        try:
+            resolved, total = con.execute(
+                f"SELECT COUNT({col}), COUNT(*) FROM {table}"
+            ).fetchone()
+            pct = resolved / total * 100 if total else 0
+            color = "green" if pct >= 95 else "yellow" if pct >= 80 else "red"
+            res_table.add_row(
+                f"{table}.{col}",
+                f"{resolved:,}", f"{total:,}",
+                f"[{color}]{pct:.1f}%[/{color}]",
+            )
+        except Exception:
+            res_table.add_row(f"{table}.{col}", "—", "—", "—")
+
+    # name_resolution method breakdown
+    total_nr = con.execute("SELECT COUNT(*) FROM name_resolution").fetchone()[0]
+    for row in con.execute("""
+        SELECT method, COUNT(*) AS n
+        FROM name_resolution GROUP BY method ORDER BY n DESC
+    """).fetchall():
+        pct = row[1] / total_nr * 100 if total_nr else 0
+        res_table.add_row(f"  name_resolution [{row[0]}]", f"{row[1]:,}", f"{total_nr:,}", f"{pct:.1f}%")
+
+    console.print(res_table)
+
+    # ── Null rates on key fact columns ────────────────────────────────────────
+    null_table = Table(title="Key Column Null Rates", show_header=True)
+    null_table.add_column("Table.Column", style="bold")
+    null_table.add_column("Nulls", justify="right")
+    null_table.add_column("Total", justify="right")
+    null_table.add_column("Null %", justify="right")
+
+    key_cols = [
+        ("fact_plays",            "game_id"),
+        ("fact_plays",            "play_id"),
+        ("fact_pass_plays",       "passer_player_name"),
+        ("fact_rush_plays",       "rusher_player_name"),
+        ("fact_player_game_stats","player_id"),
+        ("fact_weekly_rosters",   "gsis_id"),
+        ("fact_snap_counts",      "pfr_player_id"),
+    ]
+    for table, col in key_cols:
+        try:
+            nulls, total = con.execute(
+                f"SELECT COUNT(*) - COUNT({col}), COUNT(*) FROM {table}"
+            ).fetchone()
+            pct = nulls / total * 100 if total else 0
+            color = "green" if pct < 1 else "yellow" if pct < 10 else "red"
+            null_table.add_row(
+                f"{table}.{col}",
+                f"{nulls:,}", f"{total:,}",
+                f"[{color}]{pct:.1f}%[/{color}]",
+            )
+        except Exception:
+            null_table.add_row(f"{table}.{col}", "—", "—", "—")
+
+    console.print(null_table)
+    con.close()
+
+
+@app.command()
 def ui(
     port: Annotated[int, typer.Option("--port", "-p", help="Port to run UI on")] = 4213,
 ):
@@ -197,13 +304,14 @@ def resolve(
 def enrich():
     """Back-fill player IDs in ref tables using resolved name_resolution data."""
     from pipeline.config import GOLD_DB
-    from pipeline.gold.loader import get_connection, apply_name_resolution
+    from pipeline.gold.loader import get_connection, init_schema, apply_name_resolution
 
     if not GOLD_DB.exists():
         console.print("[red]Database not found. Run `nfl load` first.[/red]")
         raise typer.Exit(1)
 
     con = get_connection()
+    init_schema(con)
     console.print("[bold]Applying name resolution to ref tables[/bold]")
     apply_name_resolution(con)
     con.close()
