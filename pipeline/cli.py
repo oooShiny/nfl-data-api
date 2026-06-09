@@ -60,11 +60,13 @@ def run(
     tags: Annotated[list[str] | None, typer.Argument(help="Specific release tags (default: all)")] = None,
     force: Annotated[bool, typer.Option("--force", "-f")] = False,
     skip_large: Annotated[bool, typer.Option("--skip-large")] = False,
+    rebuild_names: Annotated[bool, typer.Option("--rebuild-names", help="Rebuild name_resolution from scratch")] = False,
 ):
-    """Full pipeline: ingest → clean → load."""
+    """Full pipeline: ingest → clean → load → resolve → enrich."""
     from pipeline.bronze.downloader import download_all
     from pipeline.silver.cleaners import clean_all
-    from pipeline.gold.loader import load_all
+    from pipeline.gold.loader import load_all, get_connection, init_schema, apply_name_resolution
+    from pipeline.gold.name_resolver import build_name_resolution
     from pipeline.config import RELEASE_TAGS, LARGE_TAGS
 
     target_tags = list(tags) if tags else RELEASE_TAGS
@@ -82,6 +84,17 @@ def run(
 
     console.rule("[bold]Step 3: Load[/bold]")
     load_all()
+
+    console.rule("[bold]Step 4: Resolve[/bold]")
+    con = get_connection()
+    init_schema(con)
+    build_name_resolution(con, rebuild=rebuild_names)
+    con.close()
+
+    console.rule("[bold]Step 5: Enrich[/bold]")
+    con = get_connection()
+    apply_name_resolution(con)
+    con.close()
 
 
 @app.command()
