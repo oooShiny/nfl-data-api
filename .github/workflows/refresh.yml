@@ -127,13 +127,12 @@ jobs:
           ])
 
           resend.api_key = os.environ["RESEND_API_KEY"]
-          params = resend.Emails.SendParams(
-              from_="nfl-pipeline@" + os.environ["RESEND_DOMAIN"],
-              to=["arbrown83@gmail.com"],
-              subject="NFL Refresh complete — " + report["run_at"][:10],
-              text=body,
-          )
-          resend.Emails.send(params)
+          resend.Emails.send({
+              "from": "nfl-pipeline@" + os.environ["RESEND_DOMAIN"],
+              "to": ["arbrown83@gmail.com"],
+              "subject": "NFL Refresh complete — " + report["run_at"][:10],
+              "text": body,
+          })
           print("Report email sent.")
           PYEOF
         env:
@@ -149,17 +148,16 @@ jobs:
           import resend
 
           run_url = (
-              f"https://github.com/{os.environ['GITHUB_REPOSITORY']}"
-              f"/actions/runs/{os.environ['GITHUB_RUN_ID']}"
+              "https://github.com/" + os.environ["GITHUB_REPOSITORY"]
+              + "/actions/runs/" + os.environ["GITHUB_RUN_ID"]
           )
           resend.api_key = os.environ["RESEND_API_KEY"]
-          params = resend.Emails.SendParams(
-              from_="nfl-pipeline@" + os.environ["RESEND_DOMAIN"],
-              to=["arbrown83@gmail.com"],
-              subject="NFL Refresh FAILED",
-              text=f"The weekly NFL data refresh failed.\n\nRun: {run_url}\n\nCheck the Actions log for details.",
-          )
-          resend.Emails.send(params)
+          resend.Emails.send({
+              "from": "nfl-pipeline@" + os.environ["RESEND_DOMAIN"],
+              "to": ["arbrown83@gmail.com"],
+              "subject": "NFL Refresh FAILED",
+              "text": "The weekly NFL data refresh failed.\n\nRun: " + run_url + "\n\nCheck the Actions log for details.",
+          })
           PYEOF
         env:
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
