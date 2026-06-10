@@ -130,14 +130,12 @@ def _clean_pbp(df: pl.DataFrame) -> pl.DataFrame:
     return df
 
 
-# Number of regular-season weeks by era, used to split REG from playoff weeks
-# in the historical (1970+) gamelogs, which only carry a single "week" number.
-def _regular_season_weeks(season: int) -> int:
-    if season <= 1977:
-        return 14
-    if season <= 2020:
-        return 16
-    return 17
+# Number of regular-season weeks, used to split REG from playoff weeks in the
+# historical (1970+) gamelogs, which only carry a single "week" number. The
+# playoffs always run 3 rounds (DIV/CON/SB) through 1977 and 4 rounds
+# (WC/DIV/CON/SB) from 1978 on, so reg-season length = max_week - num_rounds.
+def _regular_season_weeks(season: int, max_week: int) -> int:
+    return max_week - (3 if season <= 1977 else 4)
 
 
 def _clean_historical_gamelogs(df: pl.DataFrame) -> pl.DataFrame:
@@ -151,8 +149,22 @@ def _clean_historical_gamelogs(df: pl.DataFrame) -> pl.DataFrame:
     ])
 
     season = int(df["season"][0])
-    reg_weeks = _regular_season_weeks(season)
+
+    # The 1993 source data mislabels the Wild Card round as week 18 (shared
+    # with the regular-season finale) and shifts the remaining playoff rounds
+    # down by one. Remap so 1993 matches every other 1990-2020 season.
+    if season == 1993:
+        df = df.with_columns(
+            pl.when((pl.col("week") == 18) & (pl.col("event_date") >= "1994-01-08"))
+            .then(pl.lit(19))
+            .when(pl.col("week") >= 19)
+            .then(pl.col("week") + 1)
+            .otherwise(pl.col("week"))
+            .alias("week")
+        )
+
     max_week = int(df["week"].max())
+    reg_weeks = _regular_season_weeks(season, max_week)
     playoff_labels = {offset: label for offset, label in enumerate(["SB", "CON", "DIV", "WC"])}
 
     df = df.with_columns(

@@ -1226,8 +1226,9 @@ def load_fact_historical_games(con: duckdb.DuckDBPyConnection) -> None:
         console.print("  [yellow]fact_historical_games: no silver files found[/yellow]")
         return
     glob = str(SILVER_DIR / "historical_gamelogs" / "*.parquet")
+    con.execute("DELETE FROM fact_historical_games")
     con.execute(f"""
-        INSERT OR REPLACE INTO fact_historical_games
+        INSERT INTO fact_historical_games
         SELECT
             game_id,
             season::SMALLINT,
@@ -1254,8 +1255,9 @@ def load_fact_game_scoring(con: duckdb.DuckDBPyConnection) -> None:
         console.print("  [yellow]fact_game_scoring: no silver files found[/yellow]")
         return
     glob = str(SILVER_DIR / "historical_scoring" / "*.parquet")
+    con.execute("DELETE FROM fact_game_scoring")
     con.execute(f"""
-        INSERT OR REPLACE INTO fact_game_scoring
+        INSERT INTO fact_game_scoring
         SELECT
             game_id,
             season::SMALLINT,
