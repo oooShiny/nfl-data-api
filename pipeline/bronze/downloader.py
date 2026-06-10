@@ -2,6 +2,7 @@
 
 import json
 import subprocess
+import time
 from pathlib import Path
 
 import httpx
@@ -13,14 +14,21 @@ from pipeline.config import BRONZE_DIR, NFLVERSE_REPO, RELEASE_TAGS
 console = Console()
 
 
-def _gh_api(path: str) -> dict | list:
-    result = subprocess.run(
-        ["gh", "api", path],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    return json.loads(result.stdout)
+def _gh_api(path: str, retries: int = 3) -> dict | list:
+    for attempt in range(1, retries + 1):
+        result = subprocess.run(
+            ["gh", "api", path],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode == 0:
+            return json.loads(result.stdout)
+        if attempt < retries:
+            time.sleep(2 ** attempt)
+            continue
+        raise RuntimeError(
+            f"gh api {path} failed (exit {result.returncode}): {result.stderr.strip()}"
+        )
 
 
 def list_release_assets(tag: str) -> list[dict]:
