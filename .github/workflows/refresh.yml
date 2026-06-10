@@ -65,6 +65,12 @@ jobs:
       - name: Upload nfl.duckdb to Fly.io volume
         run: |
           export PATH="$HOME/.fly/bin:$PATH"
+          # Wake the machine — sftp requires a running VM
+          fly machines start $(fly machines list --app "$FLY_APP" -j | jq -r '.[0].id') --app "$FLY_APP" || true
+          for i in $(seq 1 12); do
+            fly status --app "$FLY_APP" -j | jq -e '.Machines[0].state == "started"' && break
+            sleep 5
+          done
           # Sync to ensure write is complete before upload
           sync
           fly sftp shell --app "$FLY_APP" << 'SFTP'
