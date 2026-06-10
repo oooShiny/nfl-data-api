@@ -6,7 +6,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
 from api.deps import get_read_only_connection
-from api.routers import games, meta, players, plays, reference, stats
+from api.routers import advanced, games, meta, players, plays, reference, stats
 
 limiter = Limiter(key_func=get_remote_address, default_limits=["100/minute"])
 
@@ -35,5 +35,6 @@ app.include_router(players.router, prefix="/v1")
 app.include_router(games.router, prefix="/v1")
 app.include_router(plays.router, prefix="/v1")
 app.include_router(stats.router, prefix="/v1")
+app.include_router(advanced.router, prefix="/v1")
 app.include_router(reference.router, prefix="/v1")
 app.include_router(meta.router, prefix="/v1")

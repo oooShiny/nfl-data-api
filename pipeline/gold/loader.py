@@ -30,7 +30,7 @@ def _load_via_select(con: duckdb.DuckDBPyConnection, table: str, parquet_glob: s
     sql = f"""
         INSERT OR REPLACE INTO {table} ({col_list})
         SELECT {col_list}
-        FROM read_parquet('{parquet_glob}', hive_partitioning=false)
+        FROM read_parquet('{parquet_glob}', hive_partitioning=false, union_by_name=true)
         WHERE {cols[0]} IS NOT NULL
     """
     con.execute(sql)
@@ -641,12 +641,583 @@ def load_ref_trades(con: duckdb.DuckDBPyConnection) -> None:
             pick_season::SMALLINT,
             pick_round::SMALLINT,
             pick_number::SMALLINT,
-            (conditional = 1)::BOOLEAN     AS conditional
+            (conditional = 1)::BOOLEAN     AS conditional,
+            NULL                            AS gsis_id
         FROM read_parquet('{glob}')
         WHERE season IS NOT NULL
     """)
     n = con.execute("SELECT COUNT(*) FROM ref_trades").fetchone()[0]
     console.print(f"  [green]✓[/green] ref_trades: {n:,} rows")
+
+
+def load_fact_pbp_participation(con: duckdb.DuckDBPyConnection) -> None:
+    glob = str(SILVER_DIR / "pbp_participation" / "pbp_participation_*.parquet")
+    if not list((SILVER_DIR / "pbp_participation").glob("*.parquet")):
+        console.print("  [yellow]fact_pbp_participation: no silver files[/yellow]")
+        return
+    con.execute(f"""
+        INSERT OR REPLACE INTO fact_pbp_participation
+        SELECT
+            nflverse_game_id    AS game_id,
+            play_id::INTEGER,
+            possession_team,
+            offense_formation,
+            offense_personnel,
+            defense_personnel,
+            defenders_in_box::SMALLINT,
+            number_of_pass_rushers::SMALLINT,
+            n_offense::SMALLINT,
+            n_defense::SMALLINT,
+            offense_players,
+            defense_players,
+            ngs_air_yards,
+            time_to_throw,
+            was_pressure::BOOLEAN,
+            route,
+            defense_man_zone_type,
+            defense_coverage_type
+        FROM read_parquet('{glob}', hive_partitioning=false, union_by_name=true)
+        WHERE nflverse_game_id IS NOT NULL AND play_id IS NOT NULL
+    """)
+    n = con.execute("SELECT COUNT(*) FROM fact_pbp_participation").fetchone()[0]
+    console.print(f"  [green]✓[/green] fact_pbp_participation: {n:,} rows")
+
+
+def load_fact_ftn_charting(con: duckdb.DuckDBPyConnection) -> None:
+    glob = str(SILVER_DIR / "ftn_charting" / "ftn_charting_*.parquet")
+    if not list((SILVER_DIR / "ftn_charting").glob("*.parquet")):
+        console.print("  [yellow]fact_ftn_charting: no silver files[/yellow]")
+        return
+    con.execute(f"""
+        INSERT OR REPLACE INTO fact_ftn_charting
+        SELECT
+            nflverse_game_id    AS game_id,
+            nflverse_play_id::INTEGER AS play_id,
+            ftn_game_id::INTEGER,
+            ftn_play_id::INTEGER,
+            season::SMALLINT,
+            week::SMALLINT,
+            starting_hash,
+            qb_location,
+            n_offense_backfield::SMALLINT,
+            n_defense_box::SMALLINT,
+            n_blitzers::SMALLINT,
+            n_pass_rushers::SMALLINT,
+            is_no_huddle::BOOLEAN,
+            is_motion::BOOLEAN,
+            is_play_action::BOOLEAN,
+            is_screen_pass::BOOLEAN,
+            is_rpo::BOOLEAN,
+            is_trick_play::BOOLEAN,
+            is_qb_sneak::BOOLEAN,
+            is_qb_out_of_pocket::BOOLEAN,
+            is_qb_fault_sack::BOOLEAN,
+            is_throw_away::BOOLEAN,
+            is_catchable_ball::BOOLEAN,
+            is_contested_ball::BOOLEAN,
+            is_created_reception::BOOLEAN,
+            is_drop::BOOLEAN,
+            is_interception_worthy::BOOLEAN,
+            read_thrown
+        FROM read_parquet('{glob}', hive_partitioning=false, union_by_name=true)
+        WHERE nflverse_game_id IS NOT NULL AND nflverse_play_id IS NOT NULL
+    """)
+    n = con.execute("SELECT COUNT(*) FROM fact_ftn_charting").fetchone()[0]
+    console.print(f"  [green]✓[/green] fact_ftn_charting: {n:,} rows")
+
+
+def load_ref_pfr_rosters(con: duckdb.DuckDBPyConnection) -> None:
+    files = _silver_files("misc")
+    f = next((p for p in files if p.name == "pfr_rosters.parquet"), None)
+    if not f:
+        console.print("  [yellow]ref_pfr_rosters: no silver file[/yellow]")
+        return
+    con.execute(f"""
+        INSERT OR REPLACE INTO ref_pfr_rosters
+        SELECT
+            season::SMALLINT,
+            pfr                 AS pfr_team,
+            nfl                 AS nfl_team,
+            pfr_player_id,
+            player,
+            "no"::SMALLINT      AS jersey_number,
+            age::SMALLINT,
+            pos                 AS position,
+            g::SMALLINT         AS games,
+            gs::SMALLINT        AS games_started,
+            wt::SMALLINT        AS weight,
+            ht                  AS height,
+            college_univ        AS college,
+            birth_date,
+            yrs                 AS years_exp,
+            av::SMALLINT        AS approximate_value,
+            drafted_tm_rnd_yr,
+            salary
+        FROM read_parquet('{f}')
+        WHERE pfr_player_id IS NOT NULL AND season IS NOT NULL
+    """)
+    n = con.execute("SELECT COUNT(*) FROM ref_pfr_rosters").fetchone()[0]
+    console.print(f"  [green]✓[/green] ref_pfr_rosters: {n:,} rows")
+
+
+def load_ref_pfr_adv_pass(con: duckdb.DuckDBPyConnection) -> None:
+    files = _silver_files("pfr_advstats")
+    f = next((p for p in files if p.name == "advstats_season_pass.parquet"), None)
+    if not f:
+        console.print("  [yellow]ref_pfr_adv_pass: no silver file[/yellow]")
+        return
+    con.execute(f"""
+        INSERT OR REPLACE INTO ref_pfr_adv_pass
+        SELECT
+            season::SMALLINT,
+            pfr_id,
+            player,
+            team,
+            pass_attempts::SMALLINT,
+            throwaways::SMALLINT,
+            spikes::SMALLINT,
+            drops::SMALLINT,
+            drop_pct,
+            bad_throws::SMALLINT,
+            bad_throw_pct,
+            on_tgt_throws::SMALLINT,
+            on_tgt_pct,
+            pocket_time,
+            times_blitzed::SMALLINT,
+            times_hurried::SMALLINT,
+            times_hit::SMALLINT,
+            times_pressured::SMALLINT,
+            pressure_pct,
+            batted_balls::SMALLINT,
+            scrambles::SMALLINT,
+            scramble_yards_per_attempt,
+            intended_air_yards::INTEGER,
+            intended_air_yards_per_pass_attempt,
+            completed_air_yards::INTEGER,
+            completed_air_yards_per_completion,
+            completed_air_yards_per_pass_attempt,
+            pass_yards_after_catch::INTEGER,
+            pass_yards_after_catch_per_completion,
+            rpo_plays::SMALLINT,
+            rpo_yards::INTEGER,
+            rpo_pass_att::SMALLINT,
+            rpo_pass_yards::INTEGER,
+            rpo_rush_att::SMALLINT,
+            rpo_rush_yards::INTEGER,
+            pa_pass_att::SMALLINT,
+            pa_pass_yards::INTEGER
+        FROM read_parquet('{f}')
+        WHERE pfr_id IS NOT NULL AND season IS NOT NULL
+    """)
+    n = con.execute("SELECT COUNT(*) FROM ref_pfr_adv_pass").fetchone()[0]
+    console.print(f"  [green]✓[/green] ref_pfr_adv_pass: {n:,} rows")
+
+
+def load_ref_pfr_adv_rush(con: duckdb.DuckDBPyConnection) -> None:
+    files = _silver_files("pfr_advstats")
+    f = next((p for p in files if p.name == "advstats_season_rush.parquet"), None)
+    if not f:
+        console.print("  [yellow]ref_pfr_adv_rush: no silver file[/yellow]")
+        return
+    con.execute(f"""
+        INSERT OR REPLACE INTO ref_pfr_adv_rush
+        SELECT
+            season::SMALLINT,
+            pfr_id,
+            player,
+            tm                  AS team,
+            age::SMALLINT,
+            pos                 AS position,
+            g::SMALLINT         AS games,
+            gs::SMALLINT        AS games_started,
+            att::INTEGER        AS attempts,
+            yds::INTEGER        AS yards,
+            td::SMALLINT        AS tds,
+            x1d::SMALLINT       AS first_downs,
+            ybc::INTEGER        AS yards_before_contact,
+            ybc_att             AS yards_before_contact_per_att,
+            yac::INTEGER        AS yards_after_contact,
+            yac_att             AS yards_after_contact_per_att,
+            brk_tkl::SMALLINT   AS broken_tackles,
+            att_br              AS attempts_per_broken_tackle,
+            loaded              AS loaded_at
+        FROM read_parquet('{f}')
+        WHERE pfr_id IS NOT NULL AND season IS NOT NULL
+    """)
+    n = con.execute("SELECT COUNT(*) FROM ref_pfr_adv_rush").fetchone()[0]
+    console.print(f"  [green]✓[/green] ref_pfr_adv_rush: {n:,} rows")
+
+
+def load_ref_pfr_adv_rec(con: duckdb.DuckDBPyConnection) -> None:
+    files = _silver_files("pfr_advstats")
+    f = next((p for p in files if p.name == "advstats_season_rec.parquet"), None)
+    if not f:
+        console.print("  [yellow]ref_pfr_adv_rec: no silver file[/yellow]")
+        return
+    con.execute(f"""
+        INSERT OR REPLACE INTO ref_pfr_adv_rec
+        SELECT
+            season::SMALLINT,
+            pfr_id,
+            player,
+            tm                  AS team,
+            age::SMALLINT,
+            pos                 AS position,
+            g::SMALLINT         AS games,
+            gs::SMALLINT        AS games_started,
+            tgt::INTEGER        AS targets,
+            rec::INTEGER        AS receptions,
+            yds::INTEGER        AS yards,
+            td::SMALLINT        AS tds,
+            x1d::SMALLINT       AS first_downs,
+            ybc::INTEGER        AS yards_before_catch,
+            ybc_r               AS yards_before_catch_per_rec,
+            yac::INTEGER        AS yards_after_catch,
+            yac_r               AS yards_after_catch_per_rec,
+            adot                AS avg_depth_of_target,
+            brk_tkl::SMALLINT   AS broken_tackles,
+            rec_br              AS receptions_per_broken_tackle,
+            drop::SMALLINT      AS drops,
+            drop_percent        AS drop_pct,
+            int::SMALLINT       AS interceptions_when_targeted,
+            rat                 AS passer_rating_when_targeted,
+            loaded              AS loaded_at
+        FROM read_parquet('{f}')
+        WHERE pfr_id IS NOT NULL AND season IS NOT NULL
+    """)
+    n = con.execute("SELECT COUNT(*) FROM ref_pfr_adv_rec").fetchone()[0]
+    console.print(f"  [green]✓[/green] ref_pfr_adv_rec: {n:,} rows")
+
+
+def load_ref_pfr_adv_def(con: duckdb.DuckDBPyConnection) -> None:
+    files = _silver_files("pfr_advstats")
+    f = next((p for p in files if p.name == "advstats_season_def.parquet"), None)
+    if not f:
+        console.print("  [yellow]ref_pfr_adv_def: no silver file[/yellow]")
+        return
+    con.execute(f"""
+        INSERT OR REPLACE INTO ref_pfr_adv_def
+        SELECT
+            season::SMALLINT,
+            pfr_id,
+            player,
+            tm                  AS team,
+            age::SMALLINT,
+            pos                 AS position,
+            g::SMALLINT         AS games,
+            gs::SMALLINT        AS games_started,
+            int::SMALLINT       AS interceptions,
+            tgt::INTEGER        AS targets,
+            cmp::INTEGER        AS completions_allowed,
+            cmp_percent         AS completion_pct_allowed,
+            yds::INTEGER        AS yards_allowed,
+            yds_cmp             AS yards_per_completion_allowed,
+            yds_tgt             AS yards_per_target_allowed,
+            td::SMALLINT        AS tds_allowed,
+            rat                 AS passer_rating_allowed,
+            dadot               AS avg_depth_of_target_allowed,
+            air::INTEGER        AS air_yards_allowed,
+            yac::INTEGER        AS yards_after_catch_allowed,
+            bltz::SMALLINT      AS blitzes,
+            hrry::SMALLINT      AS hurries,
+            qbkd::SMALLINT      AS qb_knockdowns,
+            sk                  AS sacks,
+            prss::SMALLINT      AS pressures,
+            comb::SMALLINT      AS combined_tackles,
+            m_tkl::SMALLINT     AS missed_tackles,
+            m_tkl_percent       AS missed_tackle_pct,
+            bats::SMALLINT      AS batted_passes,
+            loaded              AS loaded_at
+        FROM read_parquet('{f}')
+        WHERE pfr_id IS NOT NULL AND season IS NOT NULL
+    """)
+    n = con.execute("SELECT COUNT(*) FROM ref_pfr_adv_def").fetchone()[0]
+    console.print(f"  [green]✓[/green] ref_pfr_adv_def: {n:,} rows")
+
+
+def load_fact_ngs_passing(con: duckdb.DuckDBPyConnection) -> None:
+    files = _silver_files("nextgen_stats")
+    f = next((p for p in files if p.name == "ngs_passing.parquet"), None)
+    if not f:
+        console.print("  [yellow]fact_ngs_passing: no silver file[/yellow]")
+        return
+    con.execute(f"""
+        INSERT OR REPLACE INTO fact_ngs_passing
+        SELECT
+            season::SMALLINT,
+            season_type,
+            week::SMALLINT,
+            player_gsis_id,
+            player_display_name,
+            player_first_name,
+            player_last_name,
+            player_short_name,
+            player_jersey_number::SMALLINT,
+            player_position,
+            team_abbr,
+            attempts::SMALLINT,
+            completions::SMALLINT,
+            pass_yards::INTEGER,
+            pass_touchdowns::SMALLINT,
+            interceptions::SMALLINT,
+            passer_rating,
+            completion_percentage,
+            expected_completion_percentage,
+            completion_percentage_above_expectation,
+            avg_time_to_throw,
+            avg_completed_air_yards,
+            avg_intended_air_yards,
+            avg_air_yards_differential,
+            avg_air_yards_to_sticks,
+            avg_air_distance,
+            max_air_distance,
+            max_completed_air_distance,
+            aggressiveness
+        FROM read_parquet('{f}')
+        WHERE player_gsis_id IS NOT NULL
+    """)
+    n = con.execute("SELECT COUNT(*) FROM fact_ngs_passing").fetchone()[0]
+    console.print(f"  [green]✓[/green] fact_ngs_passing: {n:,} rows")
+
+
+def load_fact_ngs_receiving(con: duckdb.DuckDBPyConnection) -> None:
+    files = _silver_files("nextgen_stats")
+    f = next((p for p in files if p.name == "ngs_receiving.parquet"), None)
+    if not f:
+        console.print("  [yellow]fact_ngs_receiving: no silver file[/yellow]")
+        return
+    con.execute(f"""
+        INSERT OR REPLACE INTO fact_ngs_receiving
+        SELECT
+            season::SMALLINT,
+            season_type,
+            week::SMALLINT,
+            player_gsis_id,
+            player_display_name,
+            player_first_name,
+            player_last_name,
+            player_short_name,
+            player_jersey_number::SMALLINT,
+            player_position,
+            team_abbr,
+            targets::SMALLINT,
+            receptions::SMALLINT,
+            yards::INTEGER,
+            rec_touchdowns::SMALLINT,
+            catch_percentage,
+            avg_cushion,
+            avg_separation,
+            avg_intended_air_yards,
+            percent_share_of_intended_air_yards,
+            avg_yac,
+            avg_expected_yac,
+            avg_yac_above_expectation
+        FROM read_parquet('{f}')
+        WHERE player_gsis_id IS NOT NULL
+    """)
+    n = con.execute("SELECT COUNT(*) FROM fact_ngs_receiving").fetchone()[0]
+    console.print(f"  [green]✓[/green] fact_ngs_receiving: {n:,} rows")
+
+
+def load_fact_ngs_rushing(con: duckdb.DuckDBPyConnection) -> None:
+    files = _silver_files("nextgen_stats")
+    f = next((p for p in files if p.name == "ngs_rushing.parquet"), None)
+    if not f:
+        console.print("  [yellow]fact_ngs_rushing: no silver file[/yellow]")
+        return
+    con.execute(f"""
+        INSERT OR REPLACE INTO fact_ngs_rushing
+        SELECT
+            season::SMALLINT,
+            season_type,
+            week::SMALLINT,
+            player_gsis_id,
+            player_display_name,
+            player_first_name,
+            player_last_name,
+            player_short_name,
+            player_jersey_number::SMALLINT,
+            player_position,
+            team_abbr,
+            rush_attempts::SMALLINT,
+            rush_yards::INTEGER,
+            rush_touchdowns::SMALLINT,
+            avg_rush_yards,
+            efficiency,
+            percent_attempts_gte_eight_defenders,
+            avg_time_to_los,
+            expected_rush_yards,
+            rush_yards_over_expected,
+            rush_yards_over_expected_per_att,
+            rush_pct_over_expected
+        FROM read_parquet('{f}')
+        WHERE player_gsis_id IS NOT NULL
+    """)
+    n = con.execute("SELECT COUNT(*) FROM fact_ngs_rushing").fetchone()[0]
+    console.print(f"  [green]✓[/green] fact_ngs_rushing: {n:,} rows")
+
+
+def load_fact_player_season_stats(con: duckdb.DuckDBPyConnection) -> None:
+    glob = str(SILVER_DIR / "stats_player" / "stats_player_post_*.parquet")
+    if not list((SILVER_DIR / "stats_player").glob("*.parquet")):
+        console.print("  [yellow]fact_player_season_stats: no silver files[/yellow]")
+        return
+    cols = [
+        "player_id", "player_name", "player_display_name", "position", "position_group",
+        "headshot_url", "season", "season_type", "recent_team", "games",
+        "completions", "attempts", "passing_yards", "passing_tds", "passing_interceptions",
+        "sacks_suffered", "sack_yards_lost", "sack_fumbles", "sack_fumbles_lost",
+        "passing_air_yards", "passing_yards_after_catch", "passing_first_downs",
+        "passing_epa", "passing_2pt_conversions", "pacr",
+        "carries", "rushing_yards", "rushing_tds", "rushing_fumbles", "rushing_fumbles_lost",
+        "rushing_first_downs", "rushing_epa", "rushing_2pt_conversions",
+        "receptions", "targets", "receiving_yards", "receiving_tds", "receiving_fumbles",
+        "receiving_fumbles_lost", "receiving_air_yards", "receiving_yards_after_catch",
+        "receiving_first_downs", "receiving_epa", "receiving_2pt_conversions",
+        "racr", "target_share", "air_yards_share", "wopr", "special_teams_tds",
+        "def_tackles_solo", "def_tackles_with_assist", "def_tackle_assists",
+        "def_tackles_for_loss", "def_tackles_for_loss_yards", "def_fumbles_forced",
+        "def_sacks", "def_sack_yards", "def_qb_hits", "def_interceptions",
+        "def_interception_yards", "def_pass_defended", "def_tds", "def_fumbles", "def_safeties",
+        "misc_yards", "fumble_recovery_own", "fumble_recovery_yards_own",
+        "fumble_recovery_opp", "fumble_recovery_yards_opp", "fumble_recovery_tds",
+        "penalties", "penalty_yards",
+        "punt_returns", "punt_return_yards", "kickoff_returns", "kickoff_return_yards",
+        "fg_made", "fg_att", "fg_missed", "fg_blocked", "fg_long", "fg_pct",
+        "fg_made_0_19", "fg_made_20_29", "fg_made_30_39", "fg_made_40_49",
+        "fg_made_50_59", "fg_made_60_",
+        "fg_missed_0_19", "fg_missed_20_29", "fg_missed_30_39", "fg_missed_40_49",
+        "fg_missed_50_59", "fg_missed_60_",
+        "fg_made_list", "fg_missed_list", "fg_blocked_list",
+        "fg_made_distance", "fg_missed_distance", "fg_blocked_distance",
+        "pat_made", "pat_att", "pat_missed", "pat_blocked", "pat_pct",
+        "gwfg_made", "gwfg_att", "gwfg_missed", "gwfg_blocked",
+        "fantasy_points", "fantasy_points_ppr",
+    ]
+    n = _load_via_select(con, "fact_player_season_stats", glob, cols)
+    console.print(f"  [green]✓[/green] fact_player_season_stats: {n:,} rows")
+
+
+def load_ref_team_stats(con: duckdb.DuckDBPyConnection) -> None:
+    glob = str(SILVER_DIR / "stats_team" / "stats_team_post_*.parquet")
+    if not list((SILVER_DIR / "stats_team").glob("*.parquet")):
+        console.print("  [yellow]ref_team_stats: no silver files[/yellow]")
+        return
+    cols = [
+        "season", "team", "season_type", "games",
+        "completions", "attempts", "passing_yards", "passing_tds", "passing_interceptions",
+        "sacks_suffered", "sack_yards_lost", "sack_fumbles", "sack_fumbles_lost",
+        "passing_air_yards", "passing_yards_after_catch", "passing_first_downs",
+        "passing_epa", "passing_2pt_conversions",
+        "carries", "rushing_yards", "rushing_tds", "rushing_fumbles", "rushing_fumbles_lost",
+        "rushing_first_downs", "rushing_epa", "rushing_2pt_conversions",
+        "receptions", "targets", "receiving_yards", "receiving_tds", "receiving_fumbles",
+        "receiving_fumbles_lost", "receiving_air_yards", "receiving_yards_after_catch",
+        "receiving_first_downs", "receiving_epa", "receiving_2pt_conversions",
+        "special_teams_tds",
+        "def_tackles_solo", "def_tackles_with_assist", "def_tackle_assists",
+        "def_tackles_for_loss", "def_tackles_for_loss_yards", "def_fumbles_forced",
+        "def_sacks", "def_sack_yards", "def_qb_hits", "def_interceptions",
+        "def_interception_yards", "def_pass_defended", "def_tds", "def_fumbles", "def_safeties",
+        "misc_yards", "fumble_recovery_own", "fumble_recovery_yards_own",
+        "fumble_recovery_opp", "fumble_recovery_yards_opp", "fumble_recovery_tds",
+        "penalties", "penalty_yards", "timeouts",
+        "punt_returns", "punt_return_yards", "kickoff_returns", "kickoff_return_yards",
+        "fg_made", "fg_att", "fg_missed", "fg_blocked", "fg_long", "fg_pct",
+        "fg_made_0_19", "fg_made_20_29", "fg_made_30_39", "fg_made_40_49",
+        "fg_made_50_59", "fg_made_60_",
+        "fg_missed_0_19", "fg_missed_20_29", "fg_missed_30_39", "fg_missed_40_49",
+        "fg_missed_50_59", "fg_missed_60_",
+        "fg_made_list", "fg_missed_list", "fg_blocked_list",
+        "fg_made_distance", "fg_missed_distance", "fg_blocked_distance",
+        "pat_made", "pat_att", "pat_missed", "pat_blocked", "pat_pct",
+        "gwfg_made", "gwfg_att", "gwfg_missed", "gwfg_blocked",
+    ]
+    n = _load_via_select(con, "ref_team_stats", glob, cols)
+    console.print(f"  [green]✓[/green] ref_team_stats: {n:,} rows")
+
+
+def load_ref_qbr_season(con: duckdb.DuckDBPyConnection) -> None:
+    files = _silver_files("espn_data")
+    f = next((p for p in files if p.name == "qbr_season_level.parquet"), None)
+    if not f:
+        console.print("  [yellow]ref_qbr_season: no silver file[/yellow]")
+        return
+    con.execute(f"""
+        INSERT OR REPLACE INTO ref_qbr_season
+        SELECT
+            season::SMALLINT,
+            season_type,
+            game_week,
+            team_abb,
+            team,
+            player_id,
+            name_display,
+            name_first,
+            name_last,
+            name_short,
+            headshot_href,
+            rank::SMALLINT      AS qbr_rank,
+            qbr_total,
+            qbr_raw,
+            pts_added,
+            qb_plays::SMALLINT,
+            epa_total,
+            pass                AS epa_pass,
+            run                 AS epa_run,
+            sack                AS epa_sack,
+            exp_sack,
+            penalty,
+            qualified
+        FROM read_parquet('{f}')
+        WHERE player_id IS NOT NULL
+    """)
+    n = con.execute("SELECT COUNT(*) FROM ref_qbr_season").fetchone()[0]
+    console.print(f"  [green]✓[/green] ref_qbr_season: {n:,} rows")
+
+
+def load_ref_qbr_week(con: duckdb.DuckDBPyConnection) -> None:
+    files = _silver_files("espn_data")
+    f = next((p for p in files if p.name == "qbr_week_level.parquet"), None)
+    if not f:
+        console.print("  [yellow]ref_qbr_week: no silver file[/yellow]")
+        return
+    con.execute(f"""
+        INSERT OR REPLACE INTO ref_qbr_week
+        SELECT
+            season::SMALLINT,
+            season_type,
+            game_id,
+            week_num::SMALLINT,
+            week_text,
+            team_abb,
+            team,
+            opp_abb,
+            opp_team,
+            opp_name,
+            player_id,
+            name_display,
+            name_first,
+            name_last,
+            name_short,
+            headshot_href,
+            rank::SMALLINT      AS qbr_rank,
+            qbr_total,
+            qbr_raw,
+            pts_added,
+            qb_plays::SMALLINT,
+            epa_total,
+            pass                AS epa_pass,
+            run                 AS epa_run,
+            sack                AS epa_sack,
+            exp_sack,
+            penalty,
+            qualified
+        FROM read_parquet('{f}')
+        WHERE player_id IS NOT NULL AND game_id IS NOT NULL
+    """)
+    n = con.execute("SELECT COUNT(*) FROM ref_qbr_week").fetchone()[0]
+    console.print(f"  [green]✓[/green] ref_qbr_week: {n:,} rows")
 
 
 # ── Name resolution back-fill ────────────────────────────────────────────────
@@ -681,6 +1252,17 @@ LOADERS = [
     ("dim_players", load_dim_players),
     ("dim_games", load_dim_games),
     ("fact_player_game_stats", load_fact_player_game_stats),
+    ("fact_player_season_stats", load_fact_player_season_stats),
+    ("fact_ngs_passing", load_fact_ngs_passing),
+    ("fact_ngs_receiving", load_fact_ngs_receiving),
+    ("fact_ngs_rushing", load_fact_ngs_rushing),
+    ("ref_pfr_adv_pass", load_ref_pfr_adv_pass),
+    ("ref_pfr_adv_rush", load_ref_pfr_adv_rush),
+    ("ref_pfr_adv_rec", load_ref_pfr_adv_rec),
+    ("ref_pfr_adv_def", load_ref_pfr_adv_def),
+    ("ref_pfr_rosters", load_ref_pfr_rosters),
+    ("fact_ftn_charting", load_fact_ftn_charting),
+    ("fact_pbp_participation", load_fact_pbp_participation),
     ("fact_rosters", load_fact_rosters),
     ("fact_weekly_rosters", load_fact_weekly_rosters),
     ("fact_snap_counts", load_fact_snap_counts),
@@ -691,6 +1273,9 @@ LOADERS = [
     ("ref_contracts", load_ref_contracts),
     ("ref_officials", load_ref_officials),
     ("ref_trades", load_ref_trades),
+    ("ref_team_stats", load_ref_team_stats),
+    ("ref_qbr_season", load_ref_qbr_season),
+    ("ref_qbr_week", load_ref_qbr_week),
     # PBP last — largest tables
     ("fact_plays", load_fact_plays),
     ("fact_pass_plays", load_fact_pass_plays),

@@ -11,9 +11,13 @@ router = APIRouter(tags=["meta"])
 GOLD_TABLES = [
     "dim_players", "dim_teams", "dim_games",
     "fact_plays", "fact_pass_plays", "fact_rush_plays", "fact_kick_plays",
-    "fact_player_game_stats", "fact_weekly_rosters", "fact_rosters",
+    "fact_pbp_participation", "fact_ftn_charting",
+    "fact_player_game_stats", "fact_player_season_stats", "fact_weekly_rosters", "fact_rosters",
     "fact_snap_counts", "fact_depth_charts", "fact_injuries",
-    "ref_combine", "ref_contracts", "ref_draft_picks", "ref_trades",
+    "fact_ngs_passing", "fact_ngs_receiving", "fact_ngs_rushing",
+    "ref_combine", "ref_contracts", "ref_draft_picks", "ref_trades", "ref_pfr_rosters",
+    "ref_team_stats", "ref_qbr_season", "ref_qbr_week",
+    "ref_pfr_adv_pass", "ref_pfr_adv_rush", "ref_pfr_adv_rec", "ref_pfr_adv_def",
     "name_resolution",
 ]
 
