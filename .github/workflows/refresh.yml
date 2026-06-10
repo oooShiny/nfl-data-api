@@ -82,7 +82,7 @@ jobs:
       - name: Restart Fly machines to reload DB
         run: |
           export PATH="$HOME/.fly/bin:$PATH"
-          fly machines restart --app "$FLY_APP"
+          fly machines restart $(fly machines list --app "$FLY_APP" -j | jq -r '.[0].id') --app "$FLY_APP"
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
 
