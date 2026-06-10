@@ -22,6 +22,8 @@ GET /v1/players/{gsis_id}/stats?season=&week=&season_type=
 ```
 GET /v1/games?season=&week=&team=&game_type=
 GET /v1/games/{game_id}
+GET /v1/games/historical?season=&week=&team=&game_type=   # 1970-2022 results (2000 missing), pre-1999 only here
+GET /v1/games/scoring?game_id=&season=&team=               # scoring-play summaries, 1970-1997
 ```
 
 ### Plays
@@ -84,7 +86,7 @@ All list endpoints return:
 
 Sourced from [nflverse-data](https://github.com/nflverse/nflverse-data) public releases.
 
-**At a glance:** every regular-season and playoff game from **1999 to the current season** (~7,500 games), every play (**1.28M**) with EPA/WPA, weekly stats for **25K players**, plus rosters, depth charts, injuries, snap counts, draft history, combine results, contracts, and trades going back to 1999 (combine/contracts/trades coverage varies by source).
+**At a glance:** every regular-season and playoff game from **1999 to the current season** (~7,500 games), every play (**1.28M**) with EPA/WPA, weekly stats for **25K players**, plus rosters, depth charts, injuries, snap counts, draft history, combine results, contracts, and trades going back to 1999 (combine/contracts/trades coverage varies by source). Game results extend back to **1970** (2000 missing) via Pro-Football-Reference, with scoring-play detail for 1970-1997.
 
 | Layer | Contents |
 |---|---|
@@ -99,6 +101,8 @@ Sourced from [nflverse-data](https://github.com/nflverse/nflverse-data) public r
 | `dim_players` | 25K | Player bio/draft info plus cross-reference IDs (gsis, esb, pfr, pff, sleeper, sportradar, yahoo, rotowire, fantasy_data) |
 | `dim_teams` | 36 | Team names, conference/division, colors, logos |
 | `dim_games` | 7.5K | Game results, schedule, stadium/weather, betting lines (spread, total) |
+| `fact_historical_games` | 12.4K | Game results 1970-2022 (2000 missing) from Pro-Football-Reference, pre-1999 not in `dim_games` |
+| `fact_game_scoring` | 44.7K | Scoring-play summaries for historical games, 1970-1997 |
 
 ### Play-by-play
 

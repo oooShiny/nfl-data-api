@@ -1220,6 +1220,61 @@ def load_ref_qbr_week(con: duckdb.DuckDBPyConnection) -> None:
     console.print(f"  [green]✓[/green] ref_qbr_week: {n:,} rows")
 
 
+def load_fact_historical_games(con: duckdb.DuckDBPyConnection) -> None:
+    files = _silver_files("historical_gamelogs")
+    if not files:
+        console.print("  [yellow]fact_historical_games: no silver files found[/yellow]")
+        return
+    glob = str(SILVER_DIR / "historical_gamelogs" / "*.parquet")
+    con.execute(f"""
+        INSERT OR REPLACE INTO fact_historical_games
+        SELECT
+            game_id,
+            season::SMALLINT,
+            week::SMALLINT,
+            game_type,
+            gameday,
+            home_team,
+            away_team,
+            home_score::SMALLINT,
+            away_score::SMALLINT,
+            result::SMALLINT,
+            total::SMALLINT,
+            boxscore_url
+        FROM read_parquet('{glob}', union_by_name=true)
+        WHERE game_id IS NOT NULL
+    """)
+    n = con.execute("SELECT COUNT(*) FROM fact_historical_games").fetchone()[0]
+    console.print(f"  [green]✓[/green] fact_historical_games: {n:,} rows")
+
+
+def load_fact_game_scoring(con: duckdb.DuckDBPyConnection) -> None:
+    files = _silver_files("historical_scoring")
+    if not files:
+        console.print("  [yellow]fact_game_scoring: no silver files found[/yellow]")
+        return
+    glob = str(SILVER_DIR / "historical_scoring" / "*.parquet")
+    con.execute(f"""
+        INSERT OR REPLACE INTO fact_game_scoring
+        SELECT
+            game_id,
+            season::SMALLINT,
+            gameday,
+            play_seq::INTEGER,
+            quarter::SMALLINT,
+            time,
+            scoring_team,
+            home_score::SMALLINT,
+            away_score::SMALLINT,
+            description,
+            boxscore_url
+        FROM read_parquet('{glob}', union_by_name=true)
+        WHERE game_id IS NOT NULL
+    """)
+    n = con.execute("SELECT COUNT(*) FROM fact_game_scoring").fetchone()[0]
+    console.print(f"  [green]✓[/green] fact_game_scoring: {n:,} rows")
+
+
 # ── Name resolution back-fill ────────────────────────────────────────────────
 
 def apply_name_resolution(con: duckdb.DuckDBPyConnection) -> None:
@@ -1251,6 +1306,8 @@ LOADERS = [
     ("dim_teams", load_dim_teams),
     ("dim_players", load_dim_players),
     ("dim_games", load_dim_games),
+    ("fact_historical_games", load_fact_historical_games),
+    ("fact_game_scoring", load_fact_game_scoring),
     ("fact_player_game_stats", load_fact_player_game_stats),
     ("fact_player_season_stats", load_fact_player_season_stats),
     ("fact_ngs_passing", load_fact_ngs_passing),

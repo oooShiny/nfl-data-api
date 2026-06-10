@@ -27,6 +27,16 @@ def ingest(
     download_all(target_tags, force=force)
 
 
+@app.command(name="ingest-historical")
+def ingest_historical(
+    force: Annotated[bool, typer.Option("--force", "-f", help="Re-import even if bronze files exist")] = False,
+):
+    """Import local historical game-log/scoring CSVs (1970+) → bronze layer. No-op if source not mounted."""
+    from pipeline.bronze.local_sources import import_local_sources
+
+    import_local_sources(force=force)
+
+
 @app.command()
 def clean(
     tags: Annotated[list[str] | None, typer.Argument(help="Specific release tags to clean (default: all)")] = None,
@@ -64,10 +74,11 @@ def run(
 ):
     """Full pipeline: ingest → clean → load → resolve → enrich."""
     from pipeline.bronze.downloader import download_all
+    from pipeline.bronze.local_sources import import_local_sources
     from pipeline.silver.cleaners import clean_all
     from pipeline.gold.loader import load_all, get_connection, init_schema, apply_name_resolution
     from pipeline.gold.name_resolver import build_name_resolution
-    from pipeline.config import RELEASE_TAGS, LARGE_TAGS
+    from pipeline.config import RELEASE_TAGS, LARGE_TAGS, LOCAL_TAGS
 
     target_tags = list(tags) if tags else RELEASE_TAGS
     if skip_large:
@@ -75,9 +86,10 @@ def run(
 
     console.rule("[bold]Step 1: Ingest[/bold]")
     download_all(target_tags, force=force)
+    import_local_sources(force=force)
 
     console.rule("[bold]Step 2: Clean[/bold]")
-    results = clean_all(target_tags, force=force)
+    results = clean_all(target_tags + LOCAL_TAGS, force=force)
     for tag, n in results.items():
         if n:
             console.print(f"  [green]✓[/green] {tag}: {n} files")
@@ -100,7 +112,7 @@ def run(
 @app.command()
 def status():
     """Show what data has been downloaded and cleaned."""
-    from pipeline.config import BRONZE_DIR, SILVER_DIR, GOLD_DB, RELEASE_TAGS
+    from pipeline.config import BRONZE_DIR, SILVER_DIR, GOLD_DB, RELEASE_TAGS, LOCAL_TAGS
 
     table = Table(title="Pipeline Status", show_header=True)
     table.add_column("Dataset", style="bold")
@@ -108,7 +120,7 @@ def status():
     table.add_column("Silver files", justify="right")
     table.add_column("Timestamp")
 
-    for tag in RELEASE_TAGS:
+    for tag in RELEASE_TAGS + LOCAL_TAGS:
         bronze_dir = BRONZE_DIR / tag
         silver_dir = SILVER_DIR / tag
         b_count = len(list(bronze_dir.glob("*.parquet"))) if bronze_dir.exists() else 0
@@ -147,6 +159,7 @@ def check():
 
     gold_tables = [
         "dim_players", "dim_teams", "dim_games",
+        "fact_historical_games", "fact_game_scoring",
         "fact_plays", "fact_pass_plays", "fact_rush_plays", "fact_kick_plays",
         "fact_player_game_stats", "fact_weekly_rosters", "fact_rosters",
         "fact_snap_counts", "fact_depth_charts", "fact_injuries",
@@ -510,6 +523,7 @@ def report(
 
     gold_tables = [
         "dim_players", "dim_teams", "dim_games",
+        "fact_historical_games", "fact_game_scoring",
         "fact_plays", "fact_pass_plays", "fact_rush_plays", "fact_kick_plays",
         "fact_player_game_stats", "fact_weekly_rosters", "fact_rosters",
         "fact_snap_counts", "fact_depth_charts", "fact_injuries",

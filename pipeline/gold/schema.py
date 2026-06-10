@@ -71,6 +71,41 @@ CREATE TABLE IF NOT EXISTS dim_games (
     div_game        BOOLEAN
 );
 
+-- Historical (pre-1999) game results from Pro-Football-Reference, 1970-2022
+-- (2000 season missing from source). Same game_id convention as dim_games;
+-- much sparser (no stadium/weather/betting data).
+CREATE TABLE IF NOT EXISTS fact_historical_games (
+    game_id         VARCHAR PRIMARY KEY,
+    season          SMALLINT,
+    week            SMALLINT,
+    game_type       VARCHAR,
+    gameday         DATE,
+    home_team       VARCHAR,
+    away_team       VARCHAR,
+    home_score      SMALLINT,
+    away_score      SMALLINT,
+    result          SMALLINT,
+    total           SMALLINT,
+    boxscore_url    VARCHAR
+);
+
+-- Scoring-play summaries for the historical (1970-1997) games above —
+-- coarser than fact_plays (one row per scoring event, not every play).
+CREATE TABLE IF NOT EXISTS fact_game_scoring (
+    game_id         VARCHAR,
+    season          SMALLINT,
+    gameday         DATE,
+    play_seq        INTEGER,
+    quarter         SMALLINT,
+    time            VARCHAR,
+    scoring_team    VARCHAR,
+    home_score      SMALLINT,             -- running score after this play
+    away_score      SMALLINT,
+    description     VARCHAR,
+    boxscore_url    VARCHAR,
+    PRIMARY KEY (game_id, play_seq)
+);
+
 -- ─────────────────────────────────────────────
 -- Fact tables
 -- ─────────────────────────────────────────────

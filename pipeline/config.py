@@ -40,3 +40,9 @@ RELEASE_TAGS = [
 
 # Tags that are expensive (large per-season files) — download last
 LARGE_TAGS = {"pbp", "stats_player", "stats_team"}
+
+# Local historical sources (Pro-Football-Reference scrapes, 1970+), not part
+# of the nflverse releases. Ingestion is a no-op if these paths aren't mounted.
+EXTERNAL_GAMELOGS_DIR = Path("/Volumes/16tbArchive/nfl-data/game-logs")
+EXTERNAL_SCORING_DIR = Path("/Volumes/16tbArchive/nfl-data/game_scoring")
+LOCAL_TAGS = ["historical_gamelogs", "historical_scoring"]

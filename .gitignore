@@ -2,6 +2,13 @@
 /data/*
 !data/last_run_counts.json
 
+# Bronze parquet for local historical sources (1970+, not part of nflverse releases,
+# not accessible from Fly — committed so the pipeline can run without the source volume)
+!data/bronze/
+data/bronze/*
+!data/bronze/historical_gamelogs/
+!data/bronze/historical_scoring/
+
 # Virtual environment
 /.venv/
 
