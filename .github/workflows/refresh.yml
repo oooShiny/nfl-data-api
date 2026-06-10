@@ -61,12 +61,10 @@ jobs:
 
       - name: Install flyctl
         run: curl -L https://fly.io/install.sh | sh
-        env:
-          FLYCTL_INSTALL: /root/.fly
 
       - name: Upload nfl.duckdb to Fly.io volume
         run: |
-          export PATH="/root/.fly/bin:$PATH"
+          export PATH="$HOME/.fly/bin:$PATH"
           # Sync to ensure write is complete before upload
           sync
           fly sftp shell --app "$FLY_APP" << 'SFTP'
@@ -74,15 +72,13 @@ jobs:
           SFTP
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
-          FLYCTL_INSTALL: /root/.fly
 
       - name: Restart Fly machines to reload DB
         run: |
-          export PATH="/root/.fly/bin:$PATH"
+          export PATH="$HOME/.fly/bin:$PATH"
           fly machines restart --app "$FLY_APP"
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
-          FLYCTL_INSTALL: /root/.fly
 
       - name: Send success report email
         if: success()
