@@ -59,33 +59,34 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Publish data release
+        run: |
+          if gh release view latest-data >/dev/null 2>&1; then
+            gh release upload latest-data data/nfl.duckdb data/last_run_counts.json --clobber
+          else
+            gh release create latest-data data/nfl.duckdb data/last_run_counts.json \
+              --title "Latest Data" --notes "Auto-updated by weekly refresh workflow"
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Install flyctl
         run: curl -L https://fly.io/install.sh | sh
 
-      - name: Upload nfl.duckdb to Fly.io volume
+      - name: Trigger remote DB refresh
         run: |
           export PATH="$HOME/.fly/bin:$PATH"
-          # Wake the machine — sftp requires a running VM
+          # Wake the machine
           fly machines start $(fly machines list --app "$FLY_APP" -j | jq -r '.[0].id') --app "$FLY_APP" || true
           for i in $(seq 1 12); do
             fly status --app "$FLY_APP" -j | jq -e '.Machines[0].state == "started"' && break
             sleep 5
           done
-          # Sync to ensure write is complete before upload
-          sync
-          fly sftp shell --app "$FLY_APP" << 'SFTP'
-          put data/nfl.duckdb /data/nfl.duckdb
-          put data/last_run_counts.json /data/last_run_counts.json
-          SFTP
+          curl -sf -X POST https://api.nfldata.org/v1/admin/refresh \
+            -H "X-Admin-Token: $ADMIN_REFRESH_TOKEN"
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
-
-      - name: Restart Fly machines to reload DB
-        run: |
-          export PATH="$HOME/.fly/bin:$PATH"
-          fly machines restart $(fly machines list --app "$FLY_APP" -j | jq -r '.[0].id') --app "$FLY_APP"
-        env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          ADMIN_REFRESH_TOKEN: ${{ secrets.ADMIN_REFRESH_TOKEN }}
 
       - name: Send success report email
         if: success()
