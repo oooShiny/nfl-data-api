@@ -5,6 +5,9 @@ on:
     - cron: "0 10 * * 2"  # Tuesday 10:00 UTC (after Monday night nflverse publish)
   workflow_dispatch:       # allow manual trigger for testing
 
+permissions:
+  contents: write
+
 env:
   FLY_APP: nfl-data-api
   REPORT_JSON: /tmp/nfl_report.json
