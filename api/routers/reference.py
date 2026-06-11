@@ -1,3 +1,5 @@
+from typing import Any
+
 import duckdb
 from fastapi import APIRouter, Depends, Query, Request
 
@@ -80,4 +82,42 @@ def list_contracts(
     ).fetchall()
     cols = [d[0] for d in db.description]
     data = [Contract.model_validate(dict(zip(cols, row))) for row in rows]
+    return PaginatedResponse(data=data, total=total, limit=limit, offset=offset)
+
+
+@router.get("/trades", response_model=PaginatedResponse[dict[str, Any]])
+def list_trades(
+    request: Request,
+    season: int | None = None,
+    team: str | None = None,
+    limit: int = Query(default=50, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
+    db: duckdb.DuckDBPyConnection = Depends(get_db),
+):
+    """Each trade spans multiple ref_trades rows (one per asset moved); paginate by trade_id."""
+    clauses, params = [], []
+    if season is not None:
+        clauses.append("season = ?")
+        params.append(season)
+    if team is not None:
+        clauses.append("(gave = ? OR received = ?)")
+        params += [team, team]
+    where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
+
+    total = db.execute(f"SELECT COUNT(DISTINCT trade_id) FROM ref_trades {where}", params).fetchone()[0]
+    trade_ids = [
+        r[0] for r in db.execute(
+            f"SELECT DISTINCT trade_id FROM ref_trades {where} ORDER BY trade_id DESC LIMIT ? OFFSET ?",
+            params + [limit, offset],
+        ).fetchall()
+    ]
+    if not trade_ids:
+        return PaginatedResponse(data=[], total=total, limit=limit, offset=offset)
+
+    rows = db.execute(
+        f"SELECT * FROM ref_trades WHERE trade_id IN ({','.join('?' * len(trade_ids))}) ORDER BY trade_id DESC, gave",
+        trade_ids,
+    ).fetchall()
+    cols = [d[0] for d in db.description]
+    data = [dict(zip(cols, row)) for row in rows]
     return PaginatedResponse(data=data, total=total, limit=limit, offset=offset)
