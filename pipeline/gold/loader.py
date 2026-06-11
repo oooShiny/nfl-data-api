@@ -1058,7 +1058,7 @@ def load_fact_ngs_rushing(con: duckdb.DuckDBPyConnection) -> None:
 
 
 def load_fact_player_season_stats(con: duckdb.DuckDBPyConnection) -> None:
-    glob = str(SILVER_DIR / "stats_player" / "stats_player_post_*.parquet")
+    glob = str(SILVER_DIR / "stats_player" / "stats_player_regpost_*.parquet")
     if not list((SILVER_DIR / "stats_player").glob("*.parquet")):
         console.print("  [yellow]fact_player_season_stats: no silver files[/yellow]")
         return
