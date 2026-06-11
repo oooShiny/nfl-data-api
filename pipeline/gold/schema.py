@@ -426,12 +426,13 @@ CREATE TABLE IF NOT EXISTS ref_trades (
     received        VARCHAR,
     pfr_id          VARCHAR,
     pfr_name        VARCHAR,
-    gsis_id         VARCHAR,
     pick_season     SMALLINT,
     pick_round      SMALLINT,
     pick_number     SMALLINT,
     conditional     BOOLEAN
 );
+-- Appended after the original columns so it lines up with the loader's
+-- INSERT INTO ... SELECT, which maps positionally and selects gsis_id last.
 ALTER TABLE ref_trades ADD COLUMN IF NOT EXISTS gsis_id VARCHAR;
 
 CREATE TABLE IF NOT EXISTS ref_team_stats (
