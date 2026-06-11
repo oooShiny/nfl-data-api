@@ -1099,12 +1099,12 @@ def load_fact_player_season_stats(con: duckdb.DuckDBPyConnection) -> None:
 
 
 def load_ref_team_stats(con: duckdb.DuckDBPyConnection) -> None:
-    glob = str(SILVER_DIR / "stats_team" / "stats_team_post_*.parquet")
+    glob = str(SILVER_DIR / "stats_team" / "stats_team_regpost_*.parquet")
     if not list((SILVER_DIR / "stats_team").glob("*.parquet")):
         console.print("  [yellow]ref_team_stats: no silver files[/yellow]")
         return
     cols = [
-        "season", "team", "season_type", "games",
+        "team", "season", "season_type", "games",
         "completions", "attempts", "passing_yards", "passing_tds", "passing_interceptions",
         "sacks_suffered", "sack_yards_lost", "sack_fumbles", "sack_fumbles_lost",
         "passing_air_yards", "passing_yards_after_catch", "passing_first_downs",
