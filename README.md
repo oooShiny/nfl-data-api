@@ -24,6 +24,7 @@ GET /v1/games?season=&week=&team=&game_type=
 GET /v1/games/{game_id}
 GET /v1/games/historical?season=&week=&team=&game_type=   # 1970-2022 results (2000 missing), pre-1999 only here
 GET /v1/games/scoring?game_id=&season=&team=               # scoring-play summaries, 1970-1997
+GET /v1/games/head-to-head?team1=&team2=&season=&game_type=&top_n=   # matchup history, records, biggest wins, top performances
 ```
 
 ### Plays
@@ -35,9 +36,9 @@ GET /v1/plays?game_id=&season=&week=&play_type=
 ### Stats
 Defaults to the most recent season if `season` is omitted.
 ```
-GET /v1/stats/passing?season=&week=&season_type=
-GET /v1/stats/rushing?season=&week=&season_type=
-GET /v1/stats/receiving?season=&week=&season_type=
+GET /v1/stats/passing?season=&week=&season_type=&team=
+GET /v1/stats/rushing?season=&week=&season_type=&team=
+GET /v1/stats/receiving?season=&week=&season_type=&team=
 GET /v1/stats/season?player_id=&season=&season_type=&position=     # season totals incl. defense/kicking
 GET /v1/stats/team?season=&team=&season_type=                       # team box scores
 ```

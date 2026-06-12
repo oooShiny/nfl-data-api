@@ -19,6 +19,7 @@ def _stats_query(
     season: int | None,
     week: int | None,
     season_type: str | None,
+    team: str | None,
     limit: int,
     offset: int,
 ) -> PaginatedResponse[PlayerGameStats]:
@@ -27,6 +28,7 @@ def _stats_query(
         ("season = ?", resolved_season),
         ("week = ?", week),
         ("season_type = ?", season_type),
+        ("recent_team = ?", team),
     ]
     where, params = _build_filter(filters)
     total = db.execute(
@@ -47,11 +49,12 @@ def passing_stats(
     season: int | None = None,
     week: int | None = None,
     season_type: str | None = None,
+    team: str | None = None,
     limit: int = Query(default=50, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
     db: duckdb.DuckDBPyConnection = Depends(get_db),
 ):
-    return _stats_query(db, "passing_yards", season, week, season_type, limit, offset)
+    return _stats_query(db, "passing_yards", season, week, season_type, team, limit, offset)
 
 
 @router.get("/stats/rushing", response_model=PaginatedResponse[PlayerGameStats])
@@ -60,11 +63,12 @@ def rushing_stats(
     season: int | None = None,
     week: int | None = None,
     season_type: str | None = None,
+    team: str | None = None,
     limit: int = Query(default=50, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
     db: duckdb.DuckDBPyConnection = Depends(get_db),
 ):
-    return _stats_query(db, "rushing_yards", season, week, season_type, limit, offset)
+    return _stats_query(db, "rushing_yards", season, week, season_type, team, limit, offset)
 
 
 @router.get("/stats/receiving", response_model=PaginatedResponse[PlayerGameStats])
@@ -73,8 +77,9 @@ def receiving_stats(
     season: int | None = None,
     week: int | None = None,
     season_type: str | None = None,
+    team: str | None = None,
     limit: int = Query(default=50, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
     db: duckdb.DuckDBPyConnection = Depends(get_db),
 ):
-    return _stats_query(db, "receiving_yards", season, week, season_type, limit, offset)
+    return _stats_query(db, "receiving_yards", season, week, season_type, team, limit, offset)

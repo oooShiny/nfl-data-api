@@ -157,13 +157,13 @@ def load_fact_player_game_stats(con: duckdb.DuckDBPyConnection) -> None:
     con.execute(f"""
         INSERT OR REPLACE INTO fact_player_game_stats
         SELECT
-            NULL                            AS game_id,
-            player_id,
-            player_display_name             AS player_name,
-            recent_team,
-            season::SMALLINT,
-            week::SMALLINT,
-            season_type,
+            g.game_id                       AS game_id,
+            ps.player_id,
+            ps.player_display_name          AS player_name,
+            ps.recent_team,
+            ps.season::SMALLINT,
+            ps.week::SMALLINT,
+            ps.season_type,
             completions::SMALLINT,
             attempts::SMALLINT,
             passing_yards::SMALLINT,
@@ -206,8 +206,16 @@ def load_fact_player_game_stats(con: duckdb.DuckDBPyConnection) -> None:
             special_teams_tds::SMALLINT,
             fantasy_points,
             fantasy_points_ppr
-        FROM read_parquet('{glob}', hive_partitioning=false, union_by_name=true)
-        WHERE player_id IS NOT NULL
+        FROM read_parquet('{glob}', hive_partitioning=false, union_by_name=true) AS ps
+        LEFT JOIN dim_games AS g
+            ON g.season = ps.season
+            AND g.week = ps.week
+            AND (g.home_team = ps.recent_team OR g.away_team = ps.recent_team)
+            AND (
+                (ps.season_type = 'REG' AND g.game_type = 'REG')
+                OR (ps.season_type = 'POST' AND g.game_type != 'REG')
+            )
+        WHERE ps.player_id IS NOT NULL
     """)
     n = con.execute("SELECT COUNT(*) FROM fact_player_game_stats").fetchone()[0]
     console.print(f"  [green]✓[/green] fact_player_game_stats: {n} rows")
