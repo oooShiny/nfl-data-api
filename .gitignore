@@ -35,6 +35,9 @@ htmlcov/
 # Review working files
 fuzzy_review_*.csv
 
+# PHP API response cache (web/)
+/web/cache/
+
 # Editors / OS
 .DS_Store
 .idea/
