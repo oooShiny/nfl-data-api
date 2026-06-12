@@ -15,6 +15,7 @@ $page_title = $page_title ?? 'NFL Data Tools and Visualizations';
         <nav class="site-nav">
             <a href="/">Home</a>
             <a href="/team_wins_finder.php">Team Wins Finder</a>
+            <a href="/head_to_head.php">Head-to-Head</a>
             <a href="/team_situation_finder.php">Team Situation Finder</a>
             <a href="/player_explorer.php">Player Explorer</a>
             <a href="/qb_comparator.php">QB Comparator</a>
