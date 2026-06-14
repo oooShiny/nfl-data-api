@@ -1,5 +1,6 @@
 """Load silver parquet files into the gold DuckDB database."""
 
+import json
 from pathlib import Path
 
 import duckdb
@@ -9,6 +10,8 @@ from pipeline.config import SILVER_DIR, GOLD_DB
 from pipeline.gold.schema import SCHEMA_SQL
 
 console = Console()
+
+_MAPPINGS_DIR = Path(__file__).parent.parent / "mappings"
 
 
 def get_connection() -> duckdb.DuckDBPyConnection:
@@ -60,6 +63,21 @@ def load_dim_teams(con: duckdb.DuckDBPyConnection) -> None:
         FROM read_parquet('{glob}')
         WHERE team_abbr IS NOT NULL
     """)
+
+    # Pre-1999 team codes used in dim_games (see _era_team_code_map in
+    # pipeline/silver/cleaners.py) for relocated/renamed franchises that
+    # predate nflverse's team table: St. Louis/Phoenix Cardinals and the
+    # Los Angeles Raiders. Seed them from their current-day counterpart so
+    # the web UI has a name/color/logo to display.
+    con.execute("""
+        INSERT OR IGNORE INTO dim_teams
+        SELECT 'SLC', 'St. Louis Cardinals', team_nick, team_conf, team_division, team_color, team_color2, team_logo_url, team_wordmark FROM dim_teams WHERE team_abbr = 'ARI'
+        UNION ALL
+        SELECT 'PHX', 'Phoenix Cardinals', team_nick, team_conf, team_division, team_color, team_color2, team_logo_url, team_wordmark FROM dim_teams WHERE team_abbr = 'ARI'
+        UNION ALL
+        SELECT 'RAI', 'Los Angeles Raiders', team_nick, team_conf, team_division, team_color, team_color2, team_logo_url, team_wordmark FROM dim_teams WHERE team_abbr = 'LV'
+    """)
+
     n = con.execute("SELECT COUNT(*) FROM dim_teams").fetchone()[0]
     console.print(f"  [green]✓[/green] dim_teams: {n} rows")
 
@@ -136,7 +154,32 @@ def load_dim_games(con: duckdb.DuckDBPyConnection) -> None:
             wind::SMALLINT,
             spread_line,
             total_line,
-            div_game
+            div_game,
+            weekday,
+            away_rest::SMALLINT,
+            home_rest::SMALLINT,
+            away_moneyline::INTEGER,
+            home_moneyline::INTEGER,
+            away_spread_odds::INTEGER,
+            home_spread_odds::INTEGER,
+            under_odds::INTEGER,
+            over_odds::INTEGER,
+            away_qb_id,
+            home_qb_id,
+            away_qb_name,
+            home_qb_name,
+            away_coach,
+            home_coach,
+            referee,
+            stadium_id,
+            old_game_id,
+            gsis::INTEGER,
+            nfl_detail_id,
+            pfr,
+            pff::INTEGER,
+            espn,
+            ftn::INTEGER,
+            CAST(NULL AS VARCHAR) AS boxscore_url
         FROM read_parquet('{glob}')
         WHERE game_id IS NOT NULL
     """)
@@ -384,7 +427,7 @@ def load_fact_rosters(con: duckdb.DuckDBPyConnection) -> None:
             jersey_number::SMALLINT,
             status,
             full_name               AS player_name,
-            gsis_id                 AS player_id,
+            COALESCE(gsis_id, 'hist_' || md5(concat(full_name, '|', team, '|', season::VARCHAR))) AS player_id,
             birth_date,
             height,
             weight::SMALLINT,
@@ -395,7 +438,7 @@ def load_fact_rosters(con: duckdb.DuckDBPyConnection) -> None:
             draft_club,
             draft_number::SMALLINT
         FROM read_parquet('{glob}', hive_partitioning=false, union_by_name=true)
-        WHERE team IS NOT NULL AND full_name IS NOT NULL AND gsis_id IS NOT NULL
+        WHERE team IS NOT NULL AND full_name IS NOT NULL
     """)
     n = con.execute("SELECT COUNT(*) FROM fact_rosters").fetchone()[0]
     console.print(f"  [green]✓[/green] fact_rosters: {n:,} rows")
@@ -1228,33 +1271,98 @@ def load_ref_qbr_week(con: duckdb.DuckDBPyConnection) -> None:
     console.print(f"  [green]✓[/green] ref_qbr_week: {n:,} rows")
 
 
-def load_fact_historical_games(con: duckdb.DuckDBPyConnection) -> None:
+def load_ref_team_elo(con: duckdb.DuckDBPyConnection) -> None:
+    files = _silver_files("nfl_elo")
+    if not files:
+        console.print("  [yellow]ref_team_elo: no silver files[/yellow]")
+        return
+    glob = str(SILVER_DIR / "nfl_elo" / "*.parquet")
+
+    team_map = json.loads((_MAPPINGS_DIR / "team_abbr.json").read_text())
+    team_map = {k: v for k, v in team_map.items() if not k.startswith("_")}
+    values = ", ".join(f"('{k}', '{v}')" for k, v in team_map.items())
+
+    con.execute(f"""
+        INSERT OR REPLACE INTO ref_team_elo
+        WITH team_map(raw, norm) AS (VALUES {values})
+        SELECT
+            e.date,
+            e.season,
+            e.neutral::BOOLEAN,
+            e.playoff,
+            e.team1,
+            e.team2,
+            COALESCE(m1.norm, e.team1) AS team1_norm,
+            COALESCE(m2.norm, e.team2) AS team2_norm,
+            e.elo1_pre,
+            e.elo2_pre,
+            e.elo_prob1,
+            e.elo_prob2,
+            e.elo1_post,
+            e.elo2_post,
+            TRY_CAST(e.qbelo1_pre AS FLOAT),
+            TRY_CAST(e.qbelo2_pre AS FLOAT),
+            e.qb1,
+            e.qb2,
+            TRY_CAST(e.qb1_value_pre AS FLOAT),
+            TRY_CAST(e.qb2_value_pre AS FLOAT),
+            TRY_CAST(e.qb1_adj AS FLOAT),
+            TRY_CAST(e.qb2_adj AS FLOAT),
+            TRY_CAST(e.qbelo_prob1 AS FLOAT),
+            TRY_CAST(e.qbelo_prob2 AS FLOAT),
+            TRY_CAST(e.qb1_game_value AS FLOAT),
+            TRY_CAST(e.qb2_game_value AS FLOAT),
+            TRY_CAST(e.qb1_value_post AS FLOAT),
+            TRY_CAST(e.qb2_value_post AS FLOAT),
+            TRY_CAST(e.qbelo1_post AS FLOAT),
+            TRY_CAST(e.qbelo2_post AS FLOAT),
+            e.score1::SMALLINT,
+            e.score2::SMALLINT,
+            TRY_CAST(e.quality AS SMALLINT),
+            TRY_CAST(e.importance AS SMALLINT),
+            TRY_CAST(e.total_rating AS SMALLINT)
+        FROM read_parquet('{glob}') e
+        LEFT JOIN team_map m1 ON m1.raw = e.team1
+        LEFT JOIN team_map m2 ON m2.raw = e.team2
+        WHERE e.date IS NOT NULL
+    """)
+    n = con.execute("SELECT COUNT(*) FROM ref_team_elo").fetchone()[0]
+    console.print(f"  [green]✓[/green] ref_team_elo: {n:,} rows")
+
+
+def load_historical_games(con: duckdb.DuckDBPyConnection) -> None:
+    """Merge pre-1999 games (1970-1998, from Pro-Football-Reference) into dim_games."""
     files = _silver_files("historical_gamelogs")
     if not files:
-        console.print("  [yellow]fact_historical_games: no silver files found[/yellow]")
+        console.print("  [yellow]dim_games (historical): no silver files found[/yellow]")
         return
     glob = str(SILVER_DIR / "historical_gamelogs" / "*.parquet")
-    con.execute("DELETE FROM fact_historical_games")
     con.execute(f"""
-        INSERT INTO fact_historical_games
+        INSERT OR REPLACE INTO dim_games
         SELECT
             game_id,
             season::SMALLINT,
             week::SMALLINT,
             game_type,
             gameday,
+            NULL,           -- gametime
             home_team,
             away_team,
             home_score::SMALLINT,
             away_score::SMALLINT,
             result::SMALLINT,
             total::SMALLINT,
+            NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,  -- overtime..total_line
+            NULL, NULL, NULL, NULL,                                -- div_game..home_rest
+            NULL, NULL, NULL, NULL, NULL, NULL,                    -- moneyline/spread/odds
+            NULL, NULL, NULL, NULL, NULL, NULL,                    -- qb_id..home_coach
+            NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,  -- referee..ftn
             boxscore_url
         FROM read_parquet('{glob}', union_by_name=true)
-        WHERE game_id IS NOT NULL
+        WHERE game_id IS NOT NULL AND season <= 1998
     """)
-    n = con.execute("SELECT COUNT(*) FROM fact_historical_games").fetchone()[0]
-    console.print(f"  [green]✓[/green] fact_historical_games: {n:,} rows")
+    n = con.execute("SELECT COUNT(*) FROM dim_games WHERE season <= 1998").fetchone()[0]
+    console.print(f"  [green]✓[/green] dim_games (historical 1970-1998): {n:,} rows")
 
 
 def load_fact_game_scoring(con: duckdb.DuckDBPyConnection) -> None:
@@ -1316,7 +1424,7 @@ LOADERS = [
     ("dim_teams", load_dim_teams),
     ("dim_players", load_dim_players),
     ("dim_games", load_dim_games),
-    ("fact_historical_games", load_fact_historical_games),
+    ("dim_games (historical)", load_historical_games),
     ("fact_game_scoring", load_fact_game_scoring),
     ("fact_player_game_stats", load_fact_player_game_stats),
     ("fact_player_season_stats", load_fact_player_season_stats),
@@ -1343,6 +1451,7 @@ LOADERS = [
     ("ref_team_stats", load_ref_team_stats),
     ("ref_qbr_season", load_ref_qbr_season),
     ("ref_qbr_week", load_ref_qbr_week),
+    ("ref_team_elo", load_ref_team_elo),
     # PBP last — largest tables
     ("fact_plays", load_fact_plays),
     ("fact_pass_plays", load_fact_pass_plays),

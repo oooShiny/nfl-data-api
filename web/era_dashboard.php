@@ -94,6 +94,26 @@ function heat_color(float $value, array $range): string {
 $chartRows = array_reverse($rows);
 $chartLabels = array_column($chartRows, 'season');
 
+// KPI tiles: latest season value + change vs. earliest season shown.
+$kpiDefs = [];
+if (!empty($rows)) {
+    $latest = $rows[0];
+    $earliest = $rows[count($rows) - 1];
+    $kpiDefs = [
+        ['label' => 'Points / Game', 'value' => number_format($latest['avg_points'], 1), 'unit' => '', 'delta' => number_format($latest['avg_points'] - $earliest['avg_points'], 1)],
+        ['label' => 'Pass Rate', 'value' => number_format($latest['pass_rate'], 1), 'unit' => '%', 'delta' => number_format($latest['pass_rate'] - $earliest['pass_rate'], 1)],
+        ['label' => 'Yards / Attempt', 'value' => number_format($latest['yards_per_attempt'], 2), 'unit' => '', 'delta' => number_format($latest['yards_per_attempt'] - $earliest['yards_per_attempt'], 2)],
+        ['label' => 'EPA / Play', 'value' => number_format($latest['epa_per_play'], 3), 'unit' => '', 'delta' => number_format($latest['epa_per_play'] - $earliest['epa_per_play'], 3)],
+    ];
+
+    $ticker_items = [
+        'ERA SPAN: ' . $earliest['season'] . '&ndash;' . $latest['season'],
+        'POINTS/GAME ' . $earliest['season'] . ': ' . number_format($earliest['avg_points'], 1) . ' &rarr; ' . $latest['season'] . ': ' . number_format($latest['avg_points'], 1),
+        'PASS RATE ' . $earliest['season'] . ': ' . number_format($earliest['pass_rate'], 1) . '% &rarr; ' . $latest['season'] . ': ' . number_format($latest['pass_rate'], 1) . '%',
+        'ONE SCHEMA ACROSS ' . count($rows) . ' SEASONS',
+    ];
+}
+
 require __DIR__ . '/includes/header.php';
 ?>
 
@@ -103,11 +123,52 @@ require __DIR__ . '/includes/header.php';
         (<code>ref_team_stats</code>), which may still be propagating to the live API.
     </div>
 <?php else: ?>
-    <div class="results-section">
-        <p style="color:#666;">
-            Cell colors show how each season compares to every other season shown: blue is the low end of the
-            range, red is the high end, for that column.
-        </p>
+    <div class="kpi-tiles">
+        <?php foreach ($kpiDefs as $k): ?>
+            <div class="kpi-tile">
+                <div class="tile-label"><?= htmlspecialchars($k['label']) ?></div>
+                <div class="kpi-tile-value"><?= htmlspecialchars($k['value']) ?><span class="unit"><?= htmlspecialchars($k['unit']) ?></span></div>
+                <div class="kpi-tile-delta">&#9650; <?= htmlspecialchars($k['delta']) ?> <span class="since">vs <?= htmlspecialchars((string) $earliest['season']) ?></span></div>
+            </div>
+        <?php endforeach; ?>
+    </div>
+
+    <div class="section-header blue">
+        <h2>Trends Over Time</h2>
+        <span class="endpoint-label">GET /v1/stats/team</span>
+    </div>
+    <div class="page-pinstripe"></div>
+    <div class="section-body" style="padding: 18px;">
+        <div class="chart-grid">
+            <div class="chart-box">
+                <h3>Avg Points / Team / Game</h3>
+                <canvas id="chart-avg_points"></canvas>
+            </div>
+            <div class="chart-box">
+                <h3>Pass Rate (%)</h3>
+                <canvas id="chart-pass_rate"></canvas>
+            </div>
+            <div class="chart-box">
+                <h3>Yards / Attempt</h3>
+                <canvas id="chart-yards_per_attempt"></canvas>
+            </div>
+            <div class="chart-box">
+                <h3>Sack Rate (%)</h3>
+                <canvas id="chart-sack_rate"></canvas>
+            </div>
+            <div class="chart-box">
+                <h3>EPA / Play</h3>
+                <canvas id="chart-epa_per_play"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <div class="section-header red">
+        <h2>Season Detail</h2>
+        <span class="endpoint-label">Heat-mapped vs. range shown</span>
+    </div>
+    <div class="page-pinstripe"></div>
+    <div class="section-body">
         <div class="table-wrap">
             <table class="data-table sortable">
                 <thead>
@@ -134,67 +195,53 @@ require __DIR__ . '/includes/header.php';
                 </tbody>
             </table>
         </div>
-
-        <h2 style="margin-top:40px;">Trends Over Time</h2>
-        <div class="chart-grid">
-            <div class="chart-box">
-                <h3>Avg Points / Team / Game</h3>
-                <canvas id="chart-avg_points"></canvas>
-            </div>
-            <div class="chart-box">
-                <h3>Pass Rate (%)</h3>
-                <canvas id="chart-pass_rate"></canvas>
-            </div>
-            <div class="chart-box">
-                <h3>Yards / Attempt</h3>
-                <canvas id="chart-yards_per_attempt"></canvas>
-            </div>
-            <div class="chart-box">
-                <h3>Sack Rate (%)</h3>
-                <canvas id="chart-sack_rate"></canvas>
-            </div>
-            <div class="chart-box">
-                <h3>EPA / Play</h3>
-                <canvas id="chart-epa_per_play"></canvas>
-            </div>
-        </div>
-
-        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-        <script>
-            const eraLabels = <?= json_encode($chartLabels) ?>;
-            const eraCharts = {
-                avg_points: { label: 'Avg Points', data: <?= json_encode(array_column($chartRows, 'avg_points')) ?> },
-                pass_rate: { label: 'Pass Rate %', data: <?= json_encode(array_column($chartRows, 'pass_rate')) ?> },
-                yards_per_attempt: { label: 'Yards/Attempt', data: <?= json_encode(array_column($chartRows, 'yards_per_attempt')) ?> },
-                sack_rate: { label: 'Sack Rate %', data: <?= json_encode(array_column($chartRows, 'sack_rate')) ?> },
-                epa_per_play: { label: 'EPA/Play', data: <?= json_encode(array_column($chartRows, 'epa_per_play')) ?> },
-            };
-
-            Object.keys(eraCharts).forEach((key) => {
-                const cfg = eraCharts[key];
-                new Chart(document.getElementById('chart-' + key), {
-                    type: 'line',
-                    data: {
-                        labels: eraLabels,
-                        datasets: [{
-                            label: cfg.label,
-                            data: cfg.data,
-                            borderColor: '#2c3e50',
-                            backgroundColor: 'rgba(44, 62, 80, 0.1)',
-                            tension: 0.2,
-                            fill: true,
-                            pointRadius: 2,
-                        }],
-                    },
-                    options: {
-                        responsive: true,
-                        plugins: { legend: { display: false } },
-                        scales: { x: { ticks: { maxTicksLimit: 10 } } },
-                    },
-                });
-            });
-        </script>
     </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        const eraLabels = <?= json_encode($chartLabels) ?>;
+        const eraCharts = {
+            avg_points: { label: 'Avg Points', data: <?= json_encode(array_column($chartRows, 'avg_points')) ?> },
+            pass_rate: { label: 'Pass Rate %', data: <?= json_encode(array_column($chartRows, 'pass_rate')) ?> },
+            yards_per_attempt: { label: 'Yards/Attempt', data: <?= json_encode(array_column($chartRows, 'yards_per_attempt')) ?> },
+            sack_rate: { label: 'Sack Rate %', data: <?= json_encode(array_column($chartRows, 'sack_rate')) ?> },
+            epa_per_play: { label: 'EPA/Play', data: <?= json_encode(array_column($chartRows, 'epa_per_play')) ?> },
+        };
+
+        Object.keys(eraCharts).forEach((key) => {
+            const cfg = eraCharts[key];
+            new Chart(document.getElementById('chart-' + key), {
+                type: 'line',
+                data: {
+                    labels: eraLabels,
+                    datasets: [{
+                        label: cfg.label,
+                        data: cfg.data,
+                        borderColor: '#e8c25a',
+                        backgroundColor: 'rgba(232,194,90,0.15)',
+                        tension: 0.2,
+                        fill: true,
+                        pointRadius: 2,
+                        pointBackgroundColor: '#e8c25a',
+                    }],
+                },
+                options: {
+                    responsive: true,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: {
+                            ticks: { maxTicksLimit: 10, color: '#7C90B4' },
+                            grid: { color: 'rgba(120,160,220,0.12)' },
+                        },
+                        y: {
+                            ticks: { color: '#7C90B4' },
+                            grid: { color: 'rgba(120,160,220,0.12)' },
+                        },
+                    },
+                },
+            });
+        });
+    </script>
 <?php endif; ?>
 
 <?php require __DIR__ . '/includes/footer.php'; ?>

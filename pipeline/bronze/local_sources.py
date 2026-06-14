@@ -8,10 +8,11 @@ paths aren't mounted, so `nfl run` still works on machines without them.
 import re
 from pathlib import Path
 
+import httpx
 import polars as pl
 from rich.console import Console
 
-from pipeline.config import BRONZE_DIR, EXTERNAL_GAMELOGS_DIR, EXTERNAL_SCORING_DIR
+from pipeline.config import BRONZE_DIR, EXTERNAL_GAMELOGS_DIR, EXTERNAL_SCORING_DIR, NFL_ELO_URL
 
 console = Console()
 
@@ -83,11 +84,28 @@ def import_scoring(force: bool = False) -> int:
     return written
 
 
+def import_elo(force: bool = False) -> int:
+    """Download FiveThirtyEight's game-by-game Elo ratings (1920-2022) into bronze."""
+    dst_dir = BRONZE_DIR / "nfl_elo"
+    dst = dst_dir / "nfl_elo.parquet"
+    if not force and dst.exists():
+        return 0
+
+    dst_dir.mkdir(parents=True, exist_ok=True)
+    resp = httpx.get(NFL_ELO_URL, follow_redirects=True, timeout=60)
+    resp.raise_for_status()
+    df = pl.read_csv(resp.content)
+    df.write_parquet(dst, compression="zstd")
+    console.print(f"  [green]✓[/green] nfl_elo: {len(df):,} rows imported")
+    return 1
+
+
 def import_local_sources(force: bool = False) -> dict[str, int]:
     console.print("[bold]Importing local historical sources[/bold]")
     results = {
         "historical_gamelogs": import_gamelogs(force=force),
         "historical_scoring": import_scoring(force=force),
+        "nfl_elo": import_elo(force=force),
     }
     total = sum(results.values())
     if total:

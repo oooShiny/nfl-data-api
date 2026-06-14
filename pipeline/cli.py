@@ -159,7 +159,7 @@ def check():
 
     gold_tables = [
         "dim_players", "dim_teams", "dim_games",
-        "fact_historical_games", "fact_game_scoring",
+        "fact_game_scoring",
         "fact_plays", "fact_pass_plays", "fact_rush_plays", "fact_kick_plays",
         "fact_player_game_stats", "fact_weekly_rosters", "fact_rosters",
         "fact_snap_counts", "fact_depth_charts", "fact_injuries",
@@ -523,7 +523,7 @@ def report(
 
     gold_tables = [
         "dim_players", "dim_teams", "dim_games",
-        "fact_historical_games", "fact_game_scoring",
+        "fact_game_scoring",
         "fact_plays", "fact_pass_plays", "fact_rush_plays", "fact_kick_plays",
         "fact_player_game_stats", "fact_weekly_rosters", "fact_rosters",
         "fact_snap_counts", "fact_depth_charts", "fact_injuries",

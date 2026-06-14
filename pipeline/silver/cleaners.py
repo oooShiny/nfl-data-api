@@ -91,6 +91,7 @@ TEAM_COLS_BY_DATASET = {
         "blocked_player_team", "field_goal_attempt_team",
     ],
     "historical_gamelogs": ["tm_alias", "opp_alias"],
+    "nfl_elo": ["team1", "team2"],
 }
 
 
@@ -124,6 +125,14 @@ def _clean_rosters(df: pl.DataFrame) -> pl.DataFrame:
     return df
 
 
+def _clean_elo(df: pl.DataFrame) -> pl.DataFrame:
+    if "date" in df.columns and df["date"].dtype == pl.Utf8:
+        df = df.with_columns(pl.col("date").str.to_date(format="%Y-%m-%d", strict=False).alias("date"))
+    if "season" in df.columns:
+        df = df.with_columns(pl.col("season").cast(pl.Int16))
+    return df
+
+
 def _clean_pbp(df: pl.DataFrame) -> pl.DataFrame:
     if "game_date" in df.columns and df["game_date"].dtype == pl.Utf8:
         df = df.with_columns(pl.col("game_date").str.to_date(strict=False).alias("game_date"))
@@ -138,6 +147,41 @@ def _regular_season_weeks(season: int, max_week: int) -> int:
     return max_week - (3 if season <= 1977 else 4)
 
 
+# The source data labels every team by its current-day franchise code (e.g.
+# the 1985 LA Raiders and the 1980 St. Louis Cardinals both show as "ARI"/
+# "LV"), but dim_games (1999+, from nflverse) labels teams by what they were
+# called at the time. Remap the relocated/renamed franchises below so
+# pre-1999 codes line up with that convention once merged into dim_games.
+def _era_team_code_map(season: int) -> dict[str, str]:
+    remap: dict[str, str] = {}
+
+    if season <= 1987:
+        remap["ARI"] = "SLC"   # St. Louis Cardinals
+    elif season <= 1993:
+        remap["ARI"] = "PHX"   # Phoenix Cardinals
+
+    if season <= 1983:
+        remap["IND"] = "BAL"   # Baltimore Colts
+
+    if season >= 1995:
+        remap["LA"] = "STL"    # St. Louis Rams
+
+    if season <= 1981:
+        remap["LV"] = "OAK"    # Oakland Raiders
+    elif season <= 1994:
+        remap["LV"] = "RAI"    # Los Angeles Raiders
+    else:
+        remap["LV"] = "OAK"    # Oakland Raiders
+
+    if season <= 1996:
+        remap["TEN"] = "HOU"   # Houston Oilers
+
+    if season <= 2016:
+        remap["LAC"] = "SD"    # San Diego Chargers
+
+    return remap
+
+
 def _clean_historical_gamelogs(df: pl.DataFrame) -> pl.DataFrame:
     df = df.with_columns(pl.col("event_date").str.to_date(strict=False).alias("gameday"))
 
@@ -149,6 +193,13 @@ def _clean_historical_gamelogs(df: pl.DataFrame) -> pl.DataFrame:
     ])
 
     season = int(df["season"][0])
+
+    remap = _era_team_code_map(season)
+    if remap:
+        df = df.with_columns([
+            pl.col("home_team").replace(remap),
+            pl.col("away_team").replace(remap),
+        ])
 
     # The 1993 source data mislabels the Wild Card round as week 18 (shared
     # with the regular-season finale) and shifts the remaining playoff rounds
@@ -275,6 +326,7 @@ _SPECIFIC_CLEANERS = {
     "pbp": _clean_pbp,
     "historical_gamelogs": _clean_historical_gamelogs,
     "historical_scoring": _clean_historical_scoring,
+    "nfl_elo": _clean_elo,
 }
 
 

@@ -139,6 +139,60 @@ function season_stat_columns(string $posGroup): array {
     };
 }
 
+/** Build career summary tiles from season-total rows, based on position group. */
+function career_tiles(array $totalsRows, string $posGroup): array {
+    $games = 0;
+    $sum = function (string $key) use ($totalsRows): float {
+        $total = 0;
+        foreach ($totalsRows as $row) {
+            $total += (float) ($row[$key] ?? 0);
+        }
+        return $total;
+    };
+    foreach ($totalsRows as $row) {
+        $games += (int) ($row['games'] ?? 0);
+    }
+
+    return match ($posGroup) {
+        'QB' => [
+            ['label' => 'Pass Yards', 'value' => number_format($sum('passing_yards')), 'sub' => 'Regular season'],
+            ['label' => 'Pass TD', 'value' => number_format($sum('passing_tds')), 'sub' => number_format($sum('passing_interceptions')) . ' interceptions'],
+            ['label' => 'Completion %', 'value' => $sum('attempts') > 0 ? number_format($sum('completions') / $sum('attempts') * 100, 1) : '-', 'sub' => number_format($sum('completions')) . ' / ' . number_format($sum('attempts'))],
+            ['label' => 'Rush Yards', 'value' => number_format($sum('rushing_yards')), 'sub' => number_format($sum('rushing_tds')) . ' rushing TD'],
+            ['label' => 'Games', 'value' => number_format($games), 'sub' => 'Career'],
+            ['label' => 'Fantasy (PPR)', 'value' => number_format($sum('fantasy_points_ppr')), 'sub' => 'Career total'],
+        ],
+        'RB' => [
+            ['label' => 'Rush Yards', 'value' => number_format($sum('rushing_yards')), 'sub' => number_format($sum('carries')) . ' carries'],
+            ['label' => 'Rush TD', 'value' => number_format($sum('rushing_tds')), 'sub' => 'Career'],
+            ['label' => 'Receptions', 'value' => number_format($sum('receptions')), 'sub' => number_format($sum('receiving_yards')) . ' yards'],
+            ['label' => 'Receiving TD', 'value' => number_format($sum('receiving_tds')), 'sub' => 'Career'],
+            ['label' => 'Games', 'value' => number_format($games), 'sub' => 'Career'],
+            ['label' => 'Fantasy (PPR)', 'value' => number_format($sum('fantasy_points_ppr')), 'sub' => 'Career total'],
+        ],
+        'WR', 'TE' => [
+            ['label' => 'Receiving Yards', 'value' => number_format($sum('receiving_yards')), 'sub' => number_format($sum('receptions')) . ' receptions'],
+            ['label' => 'Receiving TD', 'value' => number_format($sum('receiving_tds')), 'sub' => 'Career'],
+            ['label' => 'Targets', 'value' => number_format($sum('targets')), 'sub' => 'Career'],
+            ['label' => 'Catch Rate', 'value' => $sum('targets') > 0 ? number_format($sum('receptions') / $sum('targets') * 100, 1) . '%' : '-', 'sub' => 'Career'],
+            ['label' => 'Games', 'value' => number_format($games), 'sub' => 'Career'],
+            ['label' => 'Fantasy (PPR)', 'value' => number_format($sum('fantasy_points_ppr')), 'sub' => 'Career total'],
+        ],
+        'DL', 'LB', 'DB' => [
+            ['label' => 'Solo Tackles', 'value' => number_format($sum('def_tackles_solo')), 'sub' => number_format($sum('def_tackles_with_assist')) . ' assists'],
+            ['label' => 'Sacks', 'value' => number_format($sum('def_sacks'), 1), 'sub' => number_format($sum('def_tackles_for_loss')) . ' TFL'],
+            ['label' => 'Interceptions', 'value' => number_format($sum('def_interceptions')), 'sub' => number_format($sum('def_pass_defended')) . ' passes defended'],
+            ['label' => 'Defensive TD', 'value' => number_format($sum('def_tds')), 'sub' => 'Career'],
+            ['label' => 'QB Hits', 'value' => number_format($sum('def_qb_hits')), 'sub' => 'Career'],
+            ['label' => 'Games', 'value' => number_format($games), 'sub' => 'Career'],
+        ],
+        default => [
+            ['label' => 'Games', 'value' => number_format($games), 'sub' => 'Career'],
+            ['label' => 'Fantasy (PPR)', 'value' => number_format($sum('fantasy_points_ppr')), 'sub' => 'Career total'],
+        ],
+    };
+}
+
 /** NGS columns to show, based on position group. */
 function ngs_columns(string $posGroup): array {
     return match ($posGroup) {
@@ -169,6 +223,18 @@ function ngs_columns(string $posGroup): array {
             'avg_yac_above_expectation' => 'YAC Above Exp',
         ],
     };
+}
+
+/** Build Next Gen Stat tiles from the most recent season-total row. */
+function ngs_tiles(array $row, string $posGroup): array {
+    $tiles = [];
+    foreach (ngs_columns($posGroup) as $key => $label) {
+        if ($key === 'season') {
+            continue;
+        }
+        $tiles[] = ['label' => $label, 'value' => fmt($row[$key] ?? null)];
+    }
+    return $tiles;
 }
 
 require __DIR__ . '/includes/header.php';
@@ -230,56 +296,124 @@ require __DIR__ . '/includes/header.php';
 <?php endif; ?>
 
 <?php if ($player !== null): ?>
-    <div class="results-section">
-        <div class="result-item">
-            <div class="result-header"><?= htmlspecialchars($player['display_name'] ?? $gsisId) ?></div>
-            <div style="padding: 15px;">
-                <strong>Position:</strong> <?= htmlspecialchars($player['position'] ?? '-') ?>
-                &nbsp;|&nbsp;
-                <strong>College:</strong> <?= htmlspecialchars($player['college'] ?? '-') ?>
-                &nbsp;|&nbsp;
-                <strong>Height/Weight:</strong>
-                <?= htmlspecialchars((string) ($player['height'] ?? '-')) ?> in /
-                <?= htmlspecialchars((string) ($player['weight'] ?? '-')) ?> lbs
-                <br>
-                <strong>Born:</strong> <?= htmlspecialchars($player['birth_date'] ?? '-') ?>
-                &nbsp;|&nbsp;
-                <strong>Status:</strong> <?= htmlspecialchars($player['status'] ?? '-') ?>
-                &nbsp;|&nbsp;
-                <strong>Experience:</strong> <?= htmlspecialchars((string) ($player['years_exp'] ?? '-')) ?> years
-                <?php if (!empty($player['draft_year'])): ?>
-                    <br>
-                    <strong>Drafted:</strong> <?= htmlspecialchars((string) $player['draft_year']) ?>,
-                    Round <?= htmlspecialchars((string) ($player['draft_round'] ?? '?')) ?>,
-                    Pick <?= htmlspecialchars((string) ($player['draft_pick'] ?? '?')) ?>
-                    by <?= htmlspecialchars($player['draft_club'] ?? '?') ?>
-                <?php endif; ?>
+    <?php
+    $posGroup = $player['position_group'] ?? '';
+    [$totalsRows, $playoffRows] = split_season_rows($seasonStats['data'] ?? []);
+    $columns = season_stat_columns($posGroup);
+    $tiles = career_tiles($totalsRows, $posGroup);
+
+    $bio = [
+        ['k' => 'Position', 'v' => htmlspecialchars($player['position'] ?? '-')],
+        ['k' => 'Ht / Wt', 'v' => htmlspecialchars((string) ($player['height'] ?? '-')) . ' in / ' . htmlspecialchars((string) ($player['weight'] ?? '-')) . ' lb'],
+        ['k' => 'Born', 'v' => htmlspecialchars($player['birth_date'] ?? '-')],
+        ['k' => 'College', 'v' => htmlspecialchars($player['college'] ?? '-')],
+        ['k' => 'Status', 'v' => htmlspecialchars($player['status'] ?? '-')],
+        ['k' => 'Experience', 'v' => htmlspecialchars((string) ($player['years_exp'] ?? '-')) . ' seasons'],
+    ];
+    if (!empty($player['draft_year'])) {
+        $bio[] = ['k' => 'Draft', 'v' => htmlspecialchars((string) $player['draft_year']) . ' &middot; Rd ' . htmlspecialchars((string) ($player['draft_round'] ?? '?')) . ', #' . htmlspecialchars((string) ($player['draft_pick'] ?? '?')) . ' (' . htmlspecialchars($player['draft_club'] ?? '?') . ')'];
+    }
+
+    $displayName = $player['display_name'] ?? $gsisId;
+    $nameParts = explode(' ', $displayName, 2);
+    $initials = '';
+    foreach ($nameParts as $part) {
+        if ($part !== '') {
+            $initials .= $part[0];
+        }
+    }
+    ?>
+
+    <div class="section-header red">
+        <h2><?= htmlspecialchars($displayName) ?></h2>
+        <span class="endpoint-label">GET /v1/players/<?= htmlspecialchars($gsisId) ?></span>
+    </div>
+    <div class="page-pinstripe"></div>
+    <div class="section-body">
+        <div class="identity-grid">
+            <div class="identity-panel">
+                <div class="identity-head">
+                    <div class="identity-pos-badge"><?= htmlspecialchars($initials) ?></div>
+                    <div>
+                        <div class="identity-name"><?= htmlspecialchars($displayName) ?></div>
+                        <div class="identity-sub"><?= htmlspecialchars($player['position'] ?? '-') ?></div>
+                    </div>
+                </div>
+                <?php foreach ($bio as $b): ?>
+                    <div class="bio-row">
+                        <span><?= htmlspecialchars($b['k']) ?></span>
+                        <span><?= $b['v'] ?></span>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+            <div class="career-tiles">
+                <?php foreach ($tiles as $t): ?>
+                    <div class="tile">
+                        <div class="tile-label"><?= htmlspecialchars($t['label']) ?></div>
+                        <div class="tile-value"><?= htmlspecialchars($t['value']) ?></div>
+                        <div class="tile-sub"><?= htmlspecialchars($t['sub']) ?></div>
+                    </div>
+                <?php endforeach; ?>
             </div>
         </div>
+    </div>
 
-        <?php
-        $posGroup = $player['position_group'] ?? '';
-        [$totalsRows, $playoffRows] = split_season_rows($seasonStats['data'] ?? []);
-        $columns = season_stat_columns($posGroup);
-        ?>
-
-        <h2>Season stats</h2>
+    <div class="section-header blue">
+        <h2>Season by season</h2>
+        <span class="endpoint-label">GET /v1/stats/season</span>
+    </div>
+    <div class="page-pinstripe"></div>
+    <div class="section-body">
         <?php render_table($totalsRows, $columns); ?>
+    </div>
 
-        <?php if (!empty($playoffRows)): ?>
+    <?php if (!empty($playoffRows)): ?>
+        <div class="section-header blue">
             <h2>Playoffs</h2>
+        </div>
+        <div class="page-pinstripe"></div>
+        <div class="section-body">
             <?php render_table($playoffRows, $columns); ?>
-        <?php endif; ?>
+        </div>
+    <?php endif; ?>
 
-        <?php if ($ngsRows !== null && !empty($ngsRows['data'])): ?>
-            <?php
-            // Season totals are reported as week 0.
-            $seasonTotals = array_values(array_filter($ngsRows['data'], fn($r) => ($r['week'] ?? null) === 0));
-            ?>
-            <h2>Next Gen Stats (season totals)</h2>
+    <?php if ($ngsRows !== null && !empty($ngsRows['data'])): ?>
+        <?php
+        // Season totals are reported as week 0.
+        $seasonTotals = array_values(array_filter($ngsRows['data'], fn($r) => ($r['week'] ?? null) === 0));
+        usort($seasonTotals, fn($a, $b) => ($b['season'] ?? 0) <=> ($a['season'] ?? 0));
+        $latestNgs = $seasonTotals[0] ?? null;
+        ?>
+        <?php if ($latestNgs !== null): ?>
+            <div class="section-header blue">
+                <h2>Next Gen Stats</h2>
+                <span class="endpoint-label"><?= htmlspecialchars((string) $latestNgs['season']) ?> season</span>
+            </div>
+            <div class="page-pinstripe"></div>
+            <div class="section-body">
+                <div class="ngs-tile-grid">
+                    <?php foreach (ngs_tiles($latestNgs, $posGroup) as $n): ?>
+                        <div class="ngs-tile">
+                            <div class="ngs-tile-value"><?= htmlspecialchars($n['value']) ?></div>
+                            <div class="ngs-tile-label"><?= htmlspecialchars($n['label']) ?></div>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+
+            <h3>Next Gen Stats &mdash; season history</h3>
             <?php render_table($seasonTotals, ngs_columns($posGroup)); ?>
         <?php endif; ?>
-    </div>
+    <?php endif; ?>
+
+    <?php
+    $ticker_items = [
+        strtoupper($displayName) . ' &middot; ' . htmlspecialchars($player['position'] ?? '-'),
+        count($totalsRows) . ' SEASON' . (count($totalsRows) === 1 ? '' : 'S') . ' OF DATA',
+        'GET /v1/players/' . $gsisId,
+        'NORMALIZED FROM ONE PLAYER RECORD',
+    ];
+    ?>
 <?php endif; ?>
 
 <?php require __DIR__ . '/includes/footer.php'; ?>

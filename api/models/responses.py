@@ -57,6 +57,7 @@ class Game(BaseModel):
     spread_line: float | None = None
     total_line: float | None = None
     div_game: bool | None = None
+    boxscore_url: str | None = None
 
 
 class Play(BaseModel):

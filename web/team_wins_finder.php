@@ -1,140 +1,18 @@
 <?php
 require_once __DIR__ . '/includes/api.php';
 
+$page_title = 'Team Wins Finder';
+$page_subtitle = 'Select teams to find weeks where all selected teams won their games.';
+
 $meta = nfl_api_get_cached('/meta', [], 86400);
 $teams = $meta['teams'] ?? [];
 $seasons = $meta['seasons'] ?? [];
 usort($teams, fn($a, $b) => strcmp($a['abbr'], $b['abbr']));
-?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NFL Team Wins Finder</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 20px;
-            background-color: #f5f5f5;
-        }
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            background-color: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-        h1 {
-            color: #333;
-            text-align: center;
-            margin-bottom: 30px;
-        }
-        .form-section {
-            margin-bottom: 30px;
-            padding: 20px;
-            background-color: #f8f9fa;
-            border-radius: 5px;
-        }
-        .team-selection {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-            gap: 10px;
-            margin-top: 15px;
-        }
-        .team-checkbox {
-            display: flex;
-            align-items: center;
-        }
-        .team-checkbox input {
-            margin-right: 8px;
-        }
-        .team-checkbox label {
-            cursor: pointer;
-        }
-        .submit-btn {
-            background-color: #2c3e50;
-            color: white;
-            padding: 12px 30px;
-            border: none;
-            border-radius: 5px;
-            font-size: 16px;
-            cursor: pointer;
-            margin-top: 20px;
-        }
-        .submit-btn:hover {
-            background-color: #34495e;
-        }
-        .results-section {
-            margin-top: 30px;
-        }
-        .result-item {
-            margin-bottom: 30px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            overflow: hidden;
-        }
-        .result-header {
-            background-color: #2c3e50;
-            color: white;
-            padding: 15px;
-            font-size: 18px;
-            font-weight: bold;
-        }
-        .games-table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-        .games-table th {
-            background-color: #ecf0f1;
-            padding: 10px;
-            text-align: left;
-            border-bottom: 2px solid #bdc3c7;
-            font-weight: bold;
-        }
-        .games-table td {
-            padding: 10px;
-            border-bottom: 1px solid #ecf0f1;
-        }
-        .games-table tr:hover {
-            background-color: #f8f9fa;
-        }
-        .win {
-            background-color: #d4edda;
-            font-weight: bold;
-        }
-        .no-results {
-            padding: 20px;
-            text-align: center;
-            color: #666;
-            font-size: 16px;
-        }
-        .error {
-            background-color: #f8d7da;
-            color: #721c24;
-            padding: 15px;
-            border-radius: 5px;
-            margin-bottom: 20px;
-        }
-        .info {
-            background-color: #d1ecf1;
-            color: #0c5460;
-            padding: 15px;
-            border-radius: 5px;
-            margin-bottom: 20px;
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>NFL Team Wins Finder</h1>
-        <p style="text-align: center; color: #666; margin-bottom: 20px;">
-            Select teams to find    weeks where all selected teams won their games
-        </p>
 
+require __DIR__ . '/includes/header.php';
+?>
         <form method="POST" class="form-section">
-            <h3>Select Teams:</h3>
+            <h3 style="grid-column: 1 / -1; margin: 0;">Select Teams</h3>
             <div class="team-selection">
 <?php
 // Output checkboxes for each team
@@ -281,7 +159,4 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['teams'])) {
     }
 }
 ?>
-    </div>
-    <script src="/assets/sorttable.js"></script>
-</body>
-</html>
+<?php require __DIR__ . '/includes/footer.php'; ?>

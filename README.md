@@ -101,9 +101,10 @@ Sourced from [nflverse-data](https://github.com/nflverse/nflverse-data) public r
 |---|---|---|
 | `dim_players` | 25K | Player bio/draft info plus cross-reference IDs (gsis, esb, pfr, pff, sleeper, sportradar, yahoo, rotowire, fantasy_data) |
 | `dim_teams` | 36 | Team names, conference/division, colors, logos |
-| `dim_games` | 7.5K | Game results, schedule, stadium/weather, betting lines (spread, total) |
+| `dim_games` | 7.5K | Game results, schedule, stadium/weather, betting lines (spread/total/moneyline/odds), starting QBs, coaches, referee, rest days, cross-reference IDs |
 | `fact_historical_games` | 12.4K | Game results 1970-2022 (2000 missing) from Pro-Football-Reference, pre-1999 not in `dim_games` |
 | `fact_game_scoring` | 44.7K | Scoring-play summaries for historical games, 1970-1997 |
+| `ref_team_elo` | 17.4K | FiveThirtyEight game-by-game Elo and QB-Elo ratings, win probabilities, starting QBs, 1920-2022 |
 
 ### Play-by-play
 
@@ -141,7 +142,7 @@ Sourced from [nflverse-data](https://github.com/nflverse/nflverse-data) public r
 | Table | Rows | Contents |
 |---|---|---|
 | `fact_weekly_rosters` | 889K | Weekly roster status, position, jersey number, experience |
-| `fact_rosters` | 89K | Season-level roster snapshots |
+| `fact_rosters` | 143K | Season-level roster snapshots, 1920-present (pre-1974 players use synthetic `hist_*` IDs, not joinable to `dim_players`) |
 | `fact_depth_charts` | 725K | Weekly depth chart position/order by team |
 | `fact_injuries` | 91K | Weekly injury reports (game and practice status, body part) |
 

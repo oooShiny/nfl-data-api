@@ -1,0 +1,312 @@
+/* Broadcast theme overrides for Swagger UI, matching nfldata.org's web/ frontend. */
+
+:root {
+    --bg-deep: #0b1c40;
+    --bg-panel: rgba(8, 20, 46, 0.92);
+    --border-primary: #2a4d8f;
+    --border-bright: #3d6fc4;
+    --gold: #e8c25a;
+    --gold-light: #f2d98a;
+    --red-primary: #d11f1f;
+    --red-dark: #6e0e0e;
+    --text-main: #EEF3FB;
+    --text-dim: #93A6C6;
+}
+
+html {
+    background-color: var(--bg-deep);
+}
+
+body {
+    background-color: var(--bg-deep);
+    background-image:
+        linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(130,175,245,0.09) 11%, rgba(255,255,255,0) 22%, rgba(255,255,255,0) 34%, rgba(140,185,255,0.07) 43%, rgba(255,255,255,0) 54%, rgba(150,195,255,0.12) 70%, rgba(255,255,255,0) 82%, rgba(120,165,235,0.08) 93%, rgba(255,255,255,0) 100%),
+        linear-gradient(178deg, #0c1f47 0%, #173a74 48%, #0a1a3d 100%);
+    background-attachment: fixed;
+    color: var(--text-main);
+}
+
+.swagger-ui {
+    font-family: 'Barlow Semi Condensed', sans-serif;
+    color: var(--text-main);
+}
+
+/* Topbar */
+.swagger-ui .topbar {
+    background: linear-gradient(160deg, var(--red-primary), var(--red-dark));
+    border-bottom: 2px solid var(--gold);
+    padding: 10px 0;
+}
+
+.swagger-ui .topbar .download-url-wrapper input[type=text] {
+    border: 1.5px solid rgba(255,255,255,0.4);
+    background: rgba(5,13,32,0.5);
+    color: #fff;
+}
+
+.swagger-ui .topbar .download-url-wrapper .download-url-button {
+    background: var(--gold);
+    color: var(--bg-deep);
+    font-weight: 700;
+}
+
+/* Title / info section */
+.swagger-ui .info { margin: 30px 0; }
+
+.swagger-ui .info .title,
+.swagger-ui .info h1,
+.swagger-ui .info h2,
+.swagger-ui .info h3,
+.swagger-ui .info h4,
+.swagger-ui .info h5 {
+    font-family: 'Oswald', sans-serif;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    color: #fff;
+}
+
+.swagger-ui .info .title small {
+    background: var(--gold);
+    color: var(--bg-deep);
+}
+
+.swagger-ui .info li,
+.swagger-ui .info p,
+.swagger-ui .info table {
+    color: var(--text-dim);
+}
+
+.swagger-ui a.nostyle,
+.swagger-ui .info a {
+    color: var(--gold);
+}
+
+/* Scheme / server selector bar */
+.swagger-ui .scheme-container {
+    background: var(--bg-panel);
+    border: 2px solid var(--border-primary);
+    box-shadow: none;
+}
+
+.swagger-ui select {
+    background: rgba(5,13,32,0.6);
+    color: var(--text-main);
+    border: 1.5px solid var(--border-primary);
+    font-family: 'IBM Plex Mono', monospace;
+}
+
+/* Operation blocks */
+.swagger-ui .opblock-tag {
+    font-family: 'Oswald', sans-serif;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #fff;
+    border-bottom: 1px solid var(--border-primary);
+}
+
+.swagger-ui .opblock-tag:hover {
+    background: rgba(45,93,176,0.15);
+}
+
+.swagger-ui .opblock {
+    background: var(--bg-panel);
+    border: 2px solid var(--border-primary);
+    box-shadow: none;
+}
+
+.swagger-ui .opblock .opblock-summary {
+    border-color: var(--border-primary);
+}
+
+.swagger-ui .opblock .opblock-summary-description {
+    color: var(--text-dim);
+}
+
+.swagger-ui .opblock .opblock-summary-path,
+.swagger-ui .opblock .opblock-summary-path__deprecated {
+    font-family: 'IBM Plex Mono', monospace;
+    color: #fff;
+}
+
+/* Method badges, recolored to the broadcast palette */
+.swagger-ui .opblock-summary-method {
+    font-family: 'Oswald', sans-serif;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    border-radius: 0;
+    text-shadow: none;
+}
+
+.swagger-ui .opblock.opblock-get {
+    background: rgba(61,111,196,0.08);
+    border-color: var(--border-bright);
+}
+
+.swagger-ui .opblock.opblock-get .opblock-summary-method {
+    background: linear-gradient(160deg, var(--border-bright), #1e3c76);
+}
+
+.swagger-ui .opblock.opblock-get .opblock-summary {
+    border-color: var(--border-bright);
+}
+
+.swagger-ui .opblock.opblock-post {
+    background: rgba(232,194,90,0.08);
+    border-color: var(--gold);
+}
+
+.swagger-ui .opblock.opblock-post .opblock-summary-method {
+    background: linear-gradient(180deg, var(--gold-light), var(--gold));
+    color: var(--bg-deep);
+}
+
+.swagger-ui .opblock.opblock-post .opblock-summary {
+    border-color: var(--gold);
+}
+
+.swagger-ui .opblock.opblock-delete,
+.swagger-ui .opblock.opblock-put,
+.swagger-ui .opblock.opblock-patch {
+    background: rgba(209,31,31,0.08);
+    border-color: var(--red-primary);
+}
+
+.swagger-ui .opblock.opblock-delete .opblock-summary-method,
+.swagger-ui .opblock.opblock-put .opblock-summary-method,
+.swagger-ui .opblock.opblock-patch .opblock-summary-method {
+    background: linear-gradient(160deg, var(--red-primary), var(--red-dark));
+}
+
+.swagger-ui .opblock.opblock-delete .opblock-summary,
+.swagger-ui .opblock.opblock-put .opblock-summary,
+.swagger-ui .opblock.opblock-patch .opblock-summary {
+    border-color: var(--red-primary);
+}
+
+/* Expanded operation body */
+.swagger-ui .opblock-body {
+    background: rgba(5,13,32,0.5);
+}
+
+.swagger-ui .opblock-description-wrapper p,
+.swagger-ui .opblock-external-docs-wrapper p,
+.swagger-ui .opblock-title_normal p,
+.swagger-ui .response-col_status,
+.swagger-ui .response-col_description,
+.swagger-ui table.parameters td,
+.swagger-ui .parameter__name,
+.swagger-ui .parameter__type,
+.swagger-ui .parameter__deprecated,
+.swagger-ui .parameter__in {
+    color: var(--text-dim);
+}
+
+.swagger-ui .parameter__name {
+    color: #fff;
+    font-family: 'IBM Plex Mono', monospace;
+}
+
+.swagger-ui table thead tr td,
+.swagger-ui table thead tr th {
+    color: var(--gold);
+    border-bottom: 1px solid var(--border-primary);
+    font-family: 'Oswald', sans-serif;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.swagger-ui .tab li {
+    color: var(--text-dim);
+}
+
+.swagger-ui .tab li.active {
+    color: var(--gold);
+}
+
+/* Models */
+.swagger-ui section.models {
+    background: var(--bg-panel);
+    border: 2px solid var(--border-primary);
+}
+
+.swagger-ui section.models .model-container {
+    background: rgba(5,13,32,0.5);
+}
+
+.swagger-ui .model-title,
+.swagger-ui .model {
+    color: var(--text-main);
+    font-family: 'IBM Plex Mono', monospace;
+}
+
+.swagger-ui section.models h4 {
+    font-family: 'Oswald', sans-serif;
+    color: #fff;
+}
+
+/* Inputs / buttons */
+.swagger-ui input[type=text],
+.swagger-ui input[type=password],
+.swagger-ui input[type=email],
+.swagger-ui textarea {
+    background: rgba(5,13,32,0.6);
+    color: var(--text-main);
+    border: 1.5px solid var(--border-primary);
+    font-family: 'IBM Plex Mono', monospace;
+}
+
+.swagger-ui .btn {
+    font-family: 'Oswald', sans-serif;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    border-radius: 0;
+    border: 1.5px solid var(--border-primary);
+    color: var(--text-main);
+    background: rgba(8,20,46,0.6);
+}
+
+.swagger-ui .btn.execute {
+    background: linear-gradient(180deg, var(--gold-light), var(--gold));
+    color: var(--bg-deep);
+    border-color: var(--gold);
+}
+
+.swagger-ui .btn.authorize {
+    color: var(--gold);
+    border-color: var(--gold);
+}
+
+.swagger-ui .btn.authorize svg {
+    fill: var(--gold);
+}
+
+/* Responses */
+.swagger-ui .responses-inner h4,
+.swagger-ui .responses-inner h5 {
+    color: #fff;
+    font-family: 'Oswald', sans-serif;
+}
+
+.swagger-ui .highlight-code,
+.swagger-ui .microlight {
+    background: #05101f !important;
+}
+
+.swagger-ui .microlight,
+.swagger-ui .microlight * {
+    color: #DCE6F5;
+    font-family: 'IBM Plex Mono', monospace;
+}
+
+.swagger-ui .response-col_status {
+    font-family: 'IBM Plex Mono', monospace;
+    font-weight: 600;
+}
+
+/* Scrollbar accent */
+::selection {
+    background: var(--gold);
+    color: var(--bg-deep);
+}

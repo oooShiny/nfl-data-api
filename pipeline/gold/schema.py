@@ -68,28 +68,38 @@ CREATE TABLE IF NOT EXISTS dim_games (
     wind            SMALLINT,
     spread_line     FLOAT,
     total_line      FLOAT,
-    div_game        BOOLEAN
-);
-
--- Historical (pre-1999) game results from Pro-Football-Reference, 1970-2022
--- (2000 season missing from source). Same game_id convention as dim_games;
--- much sparser (no stadium/weather/betting data).
-CREATE TABLE IF NOT EXISTS fact_historical_games (
-    game_id         VARCHAR PRIMARY KEY,
-    season          SMALLINT,
-    week            SMALLINT,
-    game_type       VARCHAR,
-    gameday         DATE,
-    home_team       VARCHAR,
-    away_team       VARCHAR,
-    home_score      SMALLINT,
-    away_score      SMALLINT,
-    result          SMALLINT,
-    total           SMALLINT,
+    div_game        BOOLEAN,
+    weekday         VARCHAR,
+    away_rest       SMALLINT,
+    home_rest       SMALLINT,
+    away_moneyline  INTEGER,
+    home_moneyline  INTEGER,
+    away_spread_odds INTEGER,
+    home_spread_odds INTEGER,
+    under_odds      INTEGER,
+    over_odds       INTEGER,
+    away_qb_id      VARCHAR,
+    home_qb_id      VARCHAR,
+    away_qb_name    VARCHAR,
+    home_qb_name    VARCHAR,
+    away_coach      VARCHAR,
+    home_coach      VARCHAR,
+    referee         VARCHAR,
+    stadium_id      VARCHAR,
+    old_game_id     VARCHAR,
+    gsis            INTEGER,
+    nfl_detail_id   VARCHAR,
+    pfr             VARCHAR,
+    pff             INTEGER,
+    espn            VARCHAR,
+    ftn             INTEGER,
+    -- Pre-1999 games (1970-1998, from Pro-Football-Reference; 2000 season
+    -- missing from source) are merged in here too, with all of the columns
+    -- above NULL except this PFR boxscore link.
     boxscore_url    VARCHAR
 );
 
--- Scoring-play summaries for the historical (1970-1997) games above —
+-- Scoring-play summaries for the historical (1970-1997) games in dim_games —
 -- coarser than fact_plays (one row per scoring event, not every play).
 CREATE TABLE IF NOT EXISTS fact_game_scoring (
     game_id         VARCHAR,
@@ -1013,6 +1023,49 @@ CREATE TABLE IF NOT EXISTS ref_qbr_week (
     penalty         FLOAT,
     qualified       BOOLEAN,
     PRIMARY KEY (game_id, player_id)
+);
+
+-- ─────────────────────────────────────────────
+-- FiveThirtyEight Elo / QB-Elo ratings, 1920-2022
+-- ─────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS ref_team_elo (
+    date            DATE,
+    season          SMALLINT,
+    neutral         BOOLEAN,
+    playoff         VARCHAR,        -- round code if a playoff game: w/d/c/s
+    team1           VARCHAR,        -- 538 abbreviation, home team
+    team2           VARCHAR,        -- 538 abbreviation, away team
+    team1_norm      VARCHAR,        -- normalized to canonical nflverse abbr where possible
+    team2_norm      VARCHAR,
+    elo1_pre        FLOAT,
+    elo2_pre        FLOAT,
+    elo_prob1       FLOAT,
+    elo_prob2       FLOAT,
+    elo1_post       FLOAT,
+    elo2_post       FLOAT,
+    qbelo1_pre      FLOAT,
+    qbelo2_pre      FLOAT,
+    qb1             VARCHAR,
+    qb2             VARCHAR,
+    qb1_value_pre   FLOAT,
+    qb2_value_pre   FLOAT,
+    qb1_adj         FLOAT,
+    qb2_adj         FLOAT,
+    qbelo_prob1     FLOAT,
+    qbelo_prob2     FLOAT,
+    qb1_game_value  FLOAT,
+    qb2_game_value  FLOAT,
+    qb1_value_post  FLOAT,
+    qb2_value_post  FLOAT,
+    qbelo1_post     FLOAT,
+    qbelo2_post     FLOAT,
+    score1          SMALLINT,
+    score2          SMALLINT,
+    quality         SMALLINT,
+    importance      SMALLINT,
+    total_rating    SMALLINT,
+    PRIMARY KEY (date, team1, team2)
 );
 
 -- ─────────────────────────────────────────────

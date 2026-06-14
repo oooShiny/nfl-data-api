@@ -45,4 +45,9 @@ LARGE_TAGS = {"pbp", "stats_player", "stats_team"}
 # of the nflverse releases. Ingestion is a no-op if these paths aren't mounted.
 EXTERNAL_GAMELOGS_DIR = Path("/Volumes/16tbArchive/nfl-data/game-logs")
 EXTERNAL_SCORING_DIR = Path("/Volumes/16tbArchive/nfl-data/game_scoring")
-LOCAL_TAGS = ["historical_gamelogs", "historical_scoring"]
+LOCAL_TAGS = ["historical_gamelogs", "historical_scoring", "nfl_elo"]
+
+# FiveThirtyEight game-by-game Elo/QB-Elo ratings, 1920-2022. The original
+# projects.fivethirtyeight.com host was decommissioned (ABC News/Disney shut
+# down 538's data projects in 2023); fetched from a Wayback Machine snapshot.
+NFL_ELO_URL = "http://web.archive.org/web/20230427025725/https://projects.fivethirtyeight.com/nfl-api/nfl_elo.csv"
