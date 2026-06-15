@@ -4,17 +4,9 @@ $page_title = $page_title ?? 'NFL Data Tools and Visualizations';
 
 $nav_links = [
     '/' => 'Home',
-    '/team_wins_finder.php' => 'Team Wins Finder',
-    '/head_to_head.php' => 'Head-to-Head',
-    '/team_situation_finder.php' => 'Team Situation Finder',
-    '/player_explorer.php' => 'Player Explorer',
-    '/qb_comparator.php' => 'QB Comparator',
-    '/play_explorer.php' => 'Play Explorer',
-    '/era_dashboard.php' => 'Era Dashboard',
-    '/draft_value.php' => 'Draft Value',
-    '/team_snapshot.php' => 'Team Snapshot',
-    '/trade_browser.php' => 'Trade History',
-    '/combine_explorer.php' => 'Combine vs Production',
+    '/built_with.php' => 'Built with This Data',
+    '/data_coverage.php' => 'Data Coverage',
+    'https://api.nfldata.org/docs' => 'API Docs',
 ];
 
 $current_page = basename($_SERVER['PHP_SELF']);
@@ -54,10 +46,13 @@ $current_page = basename($_SERVER['PHP_SELF']);
             <div class="silver-row">
                 <nav class="site-nav">
                     <?php foreach ($nav_links as $href => $label):
-                        $is_active = ($href === '/' && $current_page === 'index.php')
-                            || ($href !== '/' && basename($href) === $current_page);
+                        $is_external = str_starts_with($href, 'http');
+                        $is_active = !$is_external && (
+                            ($href === '/' && $current_page === 'index.php')
+                            || ($href !== '/' && basename($href) === $current_page)
+                        );
                     ?>
-                        <a href="<?= $href ?>" class="<?= $is_active ? 'active' : '' ?>"><?= htmlspecialchars($label) ?></a>
+                        <a href="<?= $href ?>" class="<?= $is_active ? 'active' : '' ?>"<?= $is_external ? ' target="_blank" rel="noopener"' : '' ?>><?= htmlspecialchars($label) ?></a>
                     <?php endforeach; ?>
                 </nav>
             </div>

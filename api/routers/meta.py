@@ -19,6 +19,7 @@ GOLD_TABLES = [
     "ref_combine", "ref_contracts", "ref_draft_picks", "ref_trades", "ref_pfr_rosters",
     "ref_team_stats", "ref_qbr_season", "ref_qbr_week",
     "ref_pfr_adv_pass", "ref_pfr_adv_rush", "ref_pfr_adv_rec", "ref_pfr_adv_def",
+    "ref_team_elo", "ref_officials",
     "name_resolution",
 ]
 
