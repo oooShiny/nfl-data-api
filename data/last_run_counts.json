@@ -1,5 +1,5 @@
 {
-  "run_at": "2026-06-15T12:49:35.626845+00:00",
+  "run_at": "2026-06-16T11:52:29.541737+00:00",
   "row_counts": {
     "dim_players": 25040,
     "dim_teams": 39,
@@ -16,7 +16,7 @@
     "fact_depth_charts": 724921,
     "fact_injuries": 90750,
     "ref_combine": 8958,
-    "ref_contracts": 51625,
+    "ref_contracts": 51629,
     "ref_draft_picks": 12927,
     "ref_trades": 4975,
     "name_resolution": 21637
