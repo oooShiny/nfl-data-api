@@ -1,7 +1,7 @@
 {
-  "run_at": "2026-06-23T11:09:17.457383+00:00",
+  "run_at": "2026-06-30T11:07:51.587618+00:00",
   "row_counts": {
-    "dim_players": 25032,
+    "dim_players": 25033,
     "dim_teams": 39,
     "dim_games": 13957,
     "fact_game_scoring": 44725,
@@ -16,13 +16,13 @@
     "fact_depth_charts": 724921,
     "fact_injuries": 90750,
     "ref_combine": 8958,
-    "ref_contracts": 51687,
+    "ref_contracts": 51672,
     "ref_draft_picks": 12927,
     "ref_trades": 4975,
-    "name_resolution": 21627
+    "name_resolution": 21630
   },
   "resolution_methods": {
-    "fuzzy": 12489,
+    "fuzzy": 12492,
     "fuzzy_review": 1016,
     "id_anchor": 8122
   }
