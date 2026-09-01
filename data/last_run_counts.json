@@ -1,29 +1,29 @@
 {
-  "run_at": "2026-08-25T10:32:16.832283+00:00",
+  "run_at": "2026-09-01T14:33:29.283668+00:00",
   "row_counts": {
-    "dim_players": 25052,
+    "dim_players": 25064,
     "dim_teams": 39,
     "dim_games": 13957,
     "fact_game_scoring": 44725,
     "fact_plays": 1279628,
-    "fact_pass_plays": 523879,
-    "fact_rush_plays": 385401,
-    "fact_kick_plays": 314212,
+    "fact_pass_plays": 523880,
+    "fact_rush_plays": 385403,
+    "fact_kick_plays": 314209,
     "fact_player_game_stats": 134469,
-    "fact_weekly_rosters": 891705,
-    "fact_rosters": 142566,
+    "fact_weekly_rosters": 891575,
+    "fact_rosters": 142436,
     "fact_snap_counts": 324611,
     "fact_depth_charts": 724921,
     "fact_injuries": 90750,
     "ref_combine": 8958,
-    "ref_contracts": 51994,
+    "ref_contracts": 52585,
     "ref_draft_picks": 12927,
     "ref_trades": 4975,
-    "name_resolution": 20989
+    "name_resolution": 20997
   },
   "resolution_methods": {
-    "fuzzy": 11857,
-    "fuzzy_review": 1010,
-    "id_anchor": 8122
+    "fuzzy": 11862,
+    "fuzzy_review": 1012,
+    "id_anchor": 8123
   }
 }
