@@ -21,7 +21,8 @@ Identifiers
 - Team: abbreviations like KC, SF, PHI. Codes differ slightly between sources: play-by-play
   and stat tables use LA (Rams) and WSH (Washington) while dim_teams lists LAR and WAS.
   Check SELECT DISTINCT on the table you query. Legacy codes (OAK, SD, STL, RAI, PHX, SLC)
-  appear in older seasons.
+  appear in older seasons. ref_pfr_rosters instead uses one fixed code per franchise in
+  every season (OAK, SD, STL, JAC), even after relocations.
 
 Conventions
 - season is the year the season started (the Feb 2024 Super Bowl is season 2023).
@@ -37,7 +38,11 @@ TABLES: dict[str, dict[str, str]] = {
     "dim_games": {
         "description": "One row per game: date, teams, final score, stadium/weather, betting lines, starting QBs, coaches, referee.",
         "coverage": "1970-present (2000 season missing). Stadium, weather, lines, QBs, coaches are 1999+ only.",
-        "notes": "result = home_score - away_score; total = combined points. spread_line is from the home team's perspective (positive = home favored).",
+        "notes": (
+            "result = home_score - away_score; total = combined points. spread_line is from the home team's perspective (positive = home favored). "
+            "roof is one of outdoors, dome, closed (retractable roof closed), open (retractable roof open). "
+            "location is 'Home' or 'Neutral' (London/Mexico/Germany games, Super Bowls); exclude Neutral for home-field questions."
+        ),
     },
     "dim_players": {
         "description": "One row per player with a known gsis_id: name, position, bio, draft info, and cross-reference IDs (pfr_id, esb_id, sleeper_id, ...).",
@@ -199,9 +204,14 @@ TABLES: dict[str, dict[str, str]] = {
         "notes": "Keyed by pfr_id.",
     },
     "ref_pfr_rosters": {
-        "description": "PFR season rosters with approximate value (AV), games, starts, salary.",
+        "description": "PFR season rosters with approximate value (AV), games played, games started, salary. The only table with actual games started per player-season.",
         "coverage": "2002-2022.",
-        "notes": "Keyed by pfr_player_id.",
+        "notes": (
+            "Keyed by pfr_player_id. games_started = regular-season starts (about 22 x games per team-season); use it for "
+            "'starters' questions (fact_depth_charts shows depth listings, not starts). nfl_team uses one fixed code per "
+            "franchise for every season: OAK = Raiders (incl. Las Vegas), SD = Chargers (incl. LA), STL = Rams (incl. LA), "
+            "JAC = Jaguars, WAS = Washington. pfr_team holds PFR's own codes (RAI, SDG, RAM, ...)."
+        ),
     },
     "ref_officials": {
         "description": "Officiating crew assignments per game by position.",
