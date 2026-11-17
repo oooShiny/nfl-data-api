@@ -16,6 +16,7 @@ dependencies = [
     "uvicorn[standard]>=0.30",
     "slowapi>=0.1.9",
     "resend>=2.0",
+    "mcp>=1.20",
 ]
 
 [project.scripts]

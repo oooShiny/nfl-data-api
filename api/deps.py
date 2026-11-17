@@ -7,11 +7,35 @@ from api.models.responses import PaginatedResponse
 from pipeline.config import GOLD_DB
 
 
+# Hardening for the shared connection. The MCP `query_sql` tool runs arbitrary
+# SELECTs from the public internet on this connection, so the engine itself must
+# refuse file/network access (read_csv, COPY TO, INSTALL, ...) and the settings
+# must be immutable from SQL. DuckDB only allows one configuration per database
+# file per process, so the REST API shares these settings (it needs none of the
+# blocked features). memory_limit/threads are sized for 2 uvicorn workers on a
+# 512MB Fly machine.
+DB_CONFIG = {
+    "enable_external_access": False,
+    "autoinstall_known_extensions": False,
+    "autoload_known_extensions": False,
+    "memory_limit": "128MB",
+    "threads": 2,
+    # Big sorts/joins spill here instead of failing; capped so they can't fill the volume.
+    "max_temp_directory_size": "512MB",
+    "lock_configuration": True,
+}
+TEMP_DIR_NAME = "duckdb_tmp"
+
+
 def get_read_only_connection() -> duckdb.DuckDBPyConnection | None:
     if not GOLD_DB.exists():
         return None
+    temp_dir = GOLD_DB.parent / TEMP_DIR_NAME
     try:
-        return duckdb.connect(str(GOLD_DB), read_only=True)
+        temp_dir.mkdir(exist_ok=True)
+        return duckdb.connect(
+            str(GOLD_DB), read_only=True, config={**DB_CONFIG, "temp_directory": str(temp_dir)}
+        )
     except Exception:
         return None
 

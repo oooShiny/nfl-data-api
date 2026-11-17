@@ -15,4 +15,4 @@ RUN ln -s /data /app/data
 
 EXPOSE 8000
 
-CMD [".venv/bin/uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+CMD [".venv/bin/uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]

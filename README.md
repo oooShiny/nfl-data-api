@@ -83,6 +83,32 @@ All list endpoints return:
 
 ---
 
+## MCP server (query with AI tools)
+
+The same database is available to AI clients over the [Model Context Protocol](https://modelcontextprotocol.io) at
+`https://nfldata-api.br0wn.net/mcp` (Streamable HTTP, no auth, 60 requests/minute per IP).
+
+```bash
+# Claude Code
+claude mcp add --transport http nfldata https://nfldata-api.br0wn.net/mcp
+```
+
+Other clients (Claude Desktop, Cursor, etc.) can add it as a remote/HTTP MCP server with that URL.
+
+| Tool | What it does |
+|---|---|
+| `list_tables` | Every table with description, coverage, and row count |
+| `describe_table` | Columns, types, join notes, sample rows |
+| `search_players` | Name → `gsis_id` and other player IDs |
+| `list_teams_and_seasons` | Team abbreviations and seasons with games |
+| `query_sql` | One read-only DuckDB `SELECT` (max 500 rows, 15s timeout) |
+
+`query_sql` is sandboxed by DuckDB itself: the connection is read-only, file/network access is disabled,
+and settings are locked (`api/deps.py`). Table descriptions live in `api/mcp_catalog.py`; keep them in sync
+with `web/data_coverage.php`.
+
+---
+
 ## Data
 
 Sourced from [nflverse-data](https://github.com/nflverse/nflverse-data) public releases.

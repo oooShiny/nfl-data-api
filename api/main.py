@@ -9,6 +9,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
+from api import mcp_server
 from api.deps import get_read_only_connection
 from api.routers import admin, advanced, games, meta, players, plays, reference, stats
 
@@ -16,12 +17,17 @@ limiter = Limiter(key_func=get_remote_address, default_limits=["100/minute"])
 
 STATIC_DIR = Path(__file__).parent / "static"
 
+mcp_app = mcp_server.build_asgi_app()
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     app.state.db = get_read_only_connection()
-    yield
-    app.state.db.close()
+    mcp_server.set_connection_getter(lambda: app.state.db)
+    async with mcp_server.server.session_manager.run():
+        yield
+    if app.state.db is not None:
+        app.state.db.close()
 
 
 app = FastAPI(
@@ -65,3 +71,7 @@ app.include_router(advanced.router, prefix="/v1")
 app.include_router(reference.router, prefix="/v1")
 app.include_router(meta.router, prefix="/v1")
 app.include_router(admin.router, prefix="/v1")
+
+# MCP endpoint at /mcp. Mounted at the root and registered last so the FastAPI
+# routes above match first; the MCP app answers only /mcp (404 otherwise).
+app.mount("/", mcp_app)
