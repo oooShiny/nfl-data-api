@@ -18,11 +18,14 @@ Identifiers
   Use the search_players tool to turn a name into a gsis_id.
 - Game: game_id, formatted 'SEASON_WEEK_AWAY_HOME', e.g. '2023_01_DET_KC' (week zero-padded).
 - Play: (game_id, play_id) is the key for fact_plays and all play-level tables.
-- Team: abbreviations like KC, SF, PHI. Codes differ slightly between sources: play-by-play
-  and stat tables use LA (Rams) and WSH (Washington) while dim_teams lists LAR and WAS.
-  Check SELECT DISTINCT on the table you query. Legacy codes (OAK, SD, STL, RAI, PHX, SLC)
-  appear in older seasons. ref_pfr_rosters instead uses one fixed code per franchise in
-  every season (OAK, SD, STL, JAC), even after relocations.
+- Team: abbreviations like KC, SF, PHI. Codes differ between sources, so check
+  SELECT DISTINCT on the table you query before joining tables on team:
+  - dim_games (1999+), play-by-play and stat tables use today's code for each franchise in
+    every season: LV (Raiders, even in Oakland years), LAC (Chargers, even in San Diego years),
+    LA (Rams, even in St. Louis years), JAX, WSH.
+  - dim_games before 1999 uses historical codes (OAK, RAI, SD, STL, PHX, SLC, LA, ...).
+  - ref_pfr_rosters uses fixed old codes in every season: OAK, SD, STL, JAC, WAS.
+  - dim_teams lists both current and legacy codes (and LAR, WAS).
 
 Conventions
 - season is the year the season started (the Feb 2024 Super Bowl is season 2023).
