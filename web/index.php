@@ -31,7 +31,7 @@ require __DIR__ . '/includes/header.php';
         <h1>A Century of<br>NFL Data,<br><span class="gold">One Clean API.</span></h1>
         <p>A century of football data, compiled over decades by the people who love it most &mdash; then cleaned, normalized, and reshaped into one predictable format. Games, players, teams, play-by-play. Free, no signup.</p>
         <div class="hero-cta">
-            <a href="https://api.nfldata.org/docs" class="btn-gold">Read the Docs &rarr;</a>
+            <a href="https://nfldata-api.br0wn.net/docs" class="btn-gold">Read the Docs &rarr;</a>
             <a href="#quickstart" class="btn-ghost">Quickstart</a>
         </div>
     </div>
@@ -39,11 +39,11 @@ require __DIR__ . '/includes/header.php';
         <div class="tape-header">
             <span class="tape-label">&#9679; The Tape</span>
             <span class="tape-file">request.sh</span>
-            <button class="copy-btn" type="button" data-copy="curl https://api.nfldata.org/v1/players/00-0033873/stats?season=2023&amp;week=1">COPY</button>
+            <button class="copy-btn" type="button" data-copy="curl https://nfldata-api.br0wn.net/v1/players/00-0033873/stats?season=2023&amp;week=1">COPY</button>
         </div>
         <div class="code-block">
             <div class="dim"># no key, no headers</div>
-            <div><span class="verb">curl</span> https://api.nfldata.org/v1/players/00-0033873/stats
+            <div><span class="verb">curl</span> https://nfldata-api.br0wn.net/v1/players/00-0033873/stats
                 <br>?season=<span class="num">2023</span>
                 <br>&amp;week=<span class="num">1</span></div>
         </div>
@@ -155,7 +155,7 @@ require __DIR__ . '/includes/header.php';
             <span class="label-lg">Assist</span>
         </div>
         <div class="credit-body">
-            <p>None of this exists without the people who compiled it &mdash; the statisticians, archivists, and open-source communities who spent years digging up box scores, charting plays, and keeping the record straight. nfldata.org doesn't replace their work. It just takes what they built and irons out the formatting wrinkles so it's easier to query.</p>
+            <p>None of this exists without the people who compiled it &mdash; the statisticians, archivists, and open-source communities who spent years digging up box scores, charting plays, and keeping the record straight. nfldata.br0wn.net doesn't replace their work. It just takes what they built and irons out the formatting wrinkles so it's easier to query.</p>
         </div>
     </div>
 </section>
@@ -229,19 +229,19 @@ require __DIR__ . '/includes/header.php';
             </div>
             <div class="code-block tab-panel active" data-tabpanel="curl">
                 <div class="dim"># no key, no headers &mdash; just GET</div>
-                <div><span class="verb">curl</span> https://api.nfldata.org/v1/players/00-0033873/stats?season=<span class="num">2023</span>&amp;week=<span class="num">1</span></div>
+                <div><span class="verb">curl</span> https://nfldata-api.br0wn.net/v1/players/00-0033873/stats?season=<span class="num">2023</span>&amp;week=<span class="num">1</span></div>
             </div>
             <div class="code-block tab-panel" data-tabpanel="python">
                 <div><span class="key">import</span> requests</div>
                 <div>&nbsp;</div>
                 <div>r = requests.<span class="str">get</span>(</div>
-                <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="str">"https://api.nfldata.org/v1/players/00-0033873/stats?season=2023&amp;week=1"</span></div>
+                <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="str">"https://nfldata-api.br0wn.net/v1/players/00-0033873/stats?season=2023&amp;week=1"</span></div>
                 <div>)</div>
                 <div><span class="str">print</span>(r.json()[<span class="str">"data"</span>][<span class="num">0</span>][<span class="str">"passing_yards"</span>])&nbsp;&nbsp;<span class="dim"># 226</span></div>
             </div>
             <div class="code-block tab-panel" data-tabpanel="js">
                 <div><span class="key">const</span> res = <span class="key">await</span> <span class="str">fetch</span>(</div>
-                <div>&nbsp;&nbsp;<span class="str">"https://api.nfldata.org/v1/players/00-0033873/stats?season=2023&amp;week=1"</span></div>
+                <div>&nbsp;&nbsp;<span class="str">"https://nfldata-api.br0wn.net/v1/players/00-0033873/stats?season=2023&amp;week=1"</span></div>
                 <div>);</div>
                 <div><span class="key">const</span> data = <span class="key">await</span> res.<span class="str">json</span>();</div>
                 <div>console.<span class="str">log</span>(data.data[0].passing_yards); <span class="dim">// 226</span></div>
@@ -254,7 +254,7 @@ require __DIR__ . '/includes/header.php';
 <section id="endpoints" style="margin-top: 38px;">
     <div class="section-header blue">
         <h2>The Lineup</h2>
-        <a href="https://api.nfldata.org/docs" style="font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase;">Full Reference &rarr;</a>
+        <a href="https://nfldata-api.br0wn.net/docs" style="font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase;">Full Reference &rarr;</a>
     </div>
     <div class="page-pinstripe"></div>
     <div class="section-body">

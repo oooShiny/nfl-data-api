@@ -6,7 +6,7 @@ $nav_links = [
     '/' => 'Home',
     '/built_with.php' => 'Built with This Data',
     '/data_coverage.php' => 'Data Coverage',
-    'https://api.nfldata.org/docs' => 'API Docs',
+    'https://nfldata-api.br0wn.net/docs' => 'API Docs',
 ];
 
 $current_page = basename($_SERVER['PHP_SELF']);
@@ -16,7 +16,7 @@ $current_page = basename($_SERVER['PHP_SELF']);
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?= htmlspecialchars($page_title) ?> - nfldata.org</title>
+    <title><?= htmlspecialchars($page_title) ?> - nfldata.br0wn.net</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Barlow+Semi+Condensed:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">

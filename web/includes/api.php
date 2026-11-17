@@ -1,7 +1,7 @@
 <?php
-// Shared helper for calling api.nfldata.org from frontend pages.
+// Shared helper for calling nfldata-api.br0wn.net from frontend pages.
 
-const NFL_API_BASE = 'https://api.nfldata.org/v1';
+const NFL_API_BASE = 'https://nfldata-api.br0wn.net/v1';
 
 /**
  * GET a path from the nfldata API and decode the JSON response.
@@ -19,7 +19,7 @@ function nfl_api_get(string $path, array $params = []): ?array {
         'http' => [
             'method' => 'GET',
             'timeout' => 15,
-            'header' => "User-Agent: nfldata.org-frontend\r\n",
+            'header' => "User-Agent: nfldata.br0wn.net-frontend\r\n",
             'ignore_errors' => true,
         ],
     ]);

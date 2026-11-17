@@ -2,7 +2,7 @@
 require_once __DIR__ . '/includes/api.php';
 
 $page_title = 'Stuff Built with this Data';
-$page_subtitle = 'Tools, dashboards, and projects built on the nfldata.org API &mdash; including the ones above.';
+$page_subtitle = 'Tools, dashboards, and projects built on the nfldata.br0wn.net API &mdash; including the ones above.';
 
 const SUBMISSION_TO_EMAIL = 'arbrown83@gmail.com';
 
@@ -23,13 +23,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['project_name'])) {
     } elseif ($old['name'] === '' || $old['url'] === '' || $old['description'] === '') {
         $status = 'error';
     } else {
-        $body = "New \"Built with nfldata.org\" submission:\n\n"
+        $body = "New \"Built with nfldata.br0wn.net\" submission:\n\n"
             . "Name: {$old['name']}\n"
             . "URL: {$old['url']}\n"
             . "Contact: {$old['contact']}\n\n"
             . "Description:\n{$old['description']}\n";
 
-        $headers = "From: nfldata.org <noreply@nfldata.org>\r\n";
+        $headers = "From: nfldata.br0wn.net <noreply@nfldata.br0wn.net>\r\n";
         if ($old['contact'] !== '' && filter_var($old['contact'], FILTER_VALIDATE_EMAIL)) {
             $headers .= 'Reply-To: ' . $old['contact'] . "\r\n";
         }
@@ -58,7 +58,7 @@ require __DIR__ . '/includes/header.php';
     </div>
     <div class="page-pinstripe"></div>
     <div class="section-body" style="padding: 16px 20px;">
-        <p style="font-family: 'Barlow Semi Condensed', sans-serif; font-size: 14.5px; color: var(--text-muted); margin: 0 0 14px;">Built a tool, dashboard, model, or app on top of the nfldata.org API? Tell us about it and we may feature it above.</p>
+        <p style="font-family: 'Barlow Semi Condensed', sans-serif; font-size: 14.5px; color: var(--text-muted); margin: 0 0 14px;">Built a tool, dashboard, model, or app on top of the nfldata.br0wn.net API? Tell us about it and we may feature it above.</p>
 
         <?php if ($status === 'success'): ?>
             <div class="info">Thanks! Your submission has been sent &mdash; we'll take a look.</div>
@@ -87,7 +87,7 @@ require __DIR__ . '/includes/header.php';
             </div>
             <div class="form-row" style="grid-column: 1 / -1;">
                 <label for="project_description">Description</label>
-                <input type="text" id="project_description" name="project_description" value="<?= htmlspecialchars($old['description']) ?>" placeholder="What does it do, and what nfldata.org endpoints does it use?" required>
+                <input type="text" id="project_description" name="project_description" value="<?= htmlspecialchars($old['description']) ?>" placeholder="What does it do, and what nfldata.br0wn.net endpoints does it use?" required>
             </div>
             <div class="form-row">
                 <button type="submit" class="submit-btn">Submit</button>

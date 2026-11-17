@@ -28,7 +28,7 @@ require __DIR__ . '/includes/header.php';
     <div class="page-pinstripe"></div>
     <div class="section-body" style="padding: 16px 20px;">
         <p style="font-family: 'Barlow Semi Condensed', sans-serif; font-size: 15.5px; color: var(--text-muted); line-height: 1.6; margin: 0 0 14px;">
-            nfldata.org combines several public NFL data sources &mdash; nflverse, Pro-Football-Reference, FiveThirtyEight, and others &mdash; into one normalized schema. Coverage varies by dataset: games and final scores go back to <?= htmlspecialchars((string) $seasonMin) ?>, while play-by-play, advanced stats, and betting data generally start in 1999 or later. The table below breaks down what's available for each part of the database, with current row counts.
+            nfldata.br0wn.net combines several public NFL data sources &mdash; nflverse, Pro-Football-Reference, FiveThirtyEight, and others &mdash; into one normalized schema. Coverage varies by dataset: games and final scores go back to <?= htmlspecialchars((string) $seasonMin) ?>, while play-by-play, advanced stats, and betting data generally start in 1999 or later. The table below breaks down what's available for each part of the database, with current row counts.
         </p>
         <div class="coverage-chips">
             <div class="chip">
@@ -353,7 +353,7 @@ require __DIR__ . '/includes/header.php';
             </table>
         </div>
         <p style="font-family: 'Barlow Semi Condensed', sans-serif; font-size: 13px; color: var(--text-dim); margin: 14px 0 0;">
-            Row counts last refreshed: <?= htmlspecialchars($health['last_refresh'] ?? 'unknown') ?>. See <a href="https://api.nfldata.org/docs">the API docs</a> for full endpoint &amp; field reference.
+            Row counts last refreshed: <?= htmlspecialchars($health['last_refresh'] ?? 'unknown') ?>. See <a href="https://nfldata-api.br0wn.net/docs">the API docs</a> for full endpoint &amp; field reference.
         </p>
     </div>
 </section>

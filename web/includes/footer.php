@@ -5,7 +5,7 @@
     <footer class="site-footer">
         <div class="footer-top">
             <div class="wordmark">NFL<span class="gold">DATA</span>.ORG</div>
-            <div class="copyright">&copy; <?= date('Y') ?> nfldata.org &mdash; Built on public NFL play-by-play data.</div>
+            <div class="copyright">&copy; <?= date('Y') ?> nfldata.br0wn.net &mdash; Built on public NFL play-by-play data.</div>
         </div>
     </footer>
     <?php

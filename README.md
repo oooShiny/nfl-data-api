@@ -2,8 +2,8 @@
 
 Public NFL data API backed by a [nflverse](https://github.com/nflverse/nflverse-data) → DuckDB medallion pipeline.
 
-**Live API:** https://api.nfldata.org  
-**Interactive docs:** https://api.nfldata.org/docs
+**Live API:** https://nfldata-api.br0wn.net  
+**Interactive docs:** https://nfldata-api.br0wn.net/docs
 
 ---
 
