@@ -188,80 +188,99 @@ def load_dim_games(con: duckdb.DuckDBPyConnection) -> None:
 
 
 def load_fact_player_game_stats(con: duckdb.DuckDBPyConnection) -> None:
-    files = _silver_files("player_stats")
+    """Weekly offensive stat lines, one row per player per game.
+
+    Source is nflverse `stats_player` (stats_player_week_YYYY), which replaced the
+    `player_stats` release after the 2024 season. It covers every player who
+    recorded a stat, including defenders and kickers; we keep rows with any
+    offensive or fantasy production so the table means what it always has.
+    `dakota` was dropped upstream, so it is filled from the legacy files where
+    they exist (through 2024) and is NULL afterwards.
+    """
+    files = [f for f in _silver_files("stats_player") if f.name.startswith("stats_player_week_")]
     if not files:
-        console.print("  [yellow]fact_player_game_stats: no silver files found[/yellow]")
+        console.print("  [yellow]fact_player_game_stats: no stats_player week files found[/yellow]")
         return
-    # Only non-kicking files (kicking stats use a different schema)
-    non_kicking = [str(f) for f in files if "kicking" not in f.name]
-    if not non_kicking:
-        return
-    glob = str(SILVER_DIR / "player_stats" / "player_stats_[0-9]*.parquet")
+    glob = str(SILVER_DIR / "stats_player" / "stats_player_week_[0-9]*.parquet")
+
+    legacy = [f for f in _silver_files("player_stats") if f.name[len("player_stats_"):][:4].isdigit()]
+    if legacy:
+        legacy_glob = str(SILVER_DIR / "player_stats" / "player_stats_[0-9]*.parquet")
+        legacy_cte = f"""legacy AS (
+            SELECT player_id, season, week, season_type, any_value(dakota) AS dakota
+            FROM read_parquet('{legacy_glob}', hive_partitioning=false, union_by_name=true)
+            GROUP BY ALL
+        )"""
+    else:
+        legacy_cte = "legacy AS (SELECT NULL::VARCHAR AS player_id, NULL::INT AS season, NULL::INT AS week, NULL::VARCHAR AS season_type, NULL::DOUBLE AS dakota WHERE false)"
+
+    con.execute("BEGIN TRANSACTION")
+    con.execute("DELETE FROM fact_player_game_stats")
     con.execute(f"""
         INSERT OR REPLACE INTO fact_player_game_stats
+        WITH {legacy_cte}
         SELECT
-            g.game_id                       AS game_id,
+            ps.game_id,
             ps.player_id,
             ps.player_display_name          AS player_name,
-            ps.recent_team,
+            ps.team                         AS recent_team,
             ps.season::SMALLINT,
             ps.week::SMALLINT,
             ps.season_type,
-            completions::SMALLINT,
-            attempts::SMALLINT,
-            passing_yards::SMALLINT,
-            passing_tds::SMALLINT,
-            interceptions::SMALLINT,
-            sacks,
-            sack_yards::SMALLINT,
-            sack_fumbles::SMALLINT,
-            sack_fumbles_lost::SMALLINT,
-            passing_air_yards::SMALLINT,
-            passing_yards_after_catch::SMALLINT,
-            passing_first_downs::SMALLINT,
-            passing_epa,
-            passing_2pt_conversions::SMALLINT,
-            pacr,
-            dakota,
-            carries::SMALLINT,
-            rushing_yards::SMALLINT,
-            rushing_tds::SMALLINT,
-            rushing_fumbles::SMALLINT,
-            rushing_fumbles_lost::SMALLINT,
-            rushing_first_downs::SMALLINT,
-            rushing_epa,
-            rushing_2pt_conversions::SMALLINT,
-            receptions::SMALLINT,
-            targets::SMALLINT,
-            receiving_yards::SMALLINT,
-            receiving_tds::SMALLINT,
-            receiving_fumbles::SMALLINT,
-            receiving_fumbles_lost::SMALLINT,
-            receiving_air_yards::SMALLINT,
-            receiving_yards_after_catch::SMALLINT,
-            receiving_first_downs::SMALLINT,
-            receiving_epa,
-            receiving_2pt_conversions::SMALLINT,
-            racr,
-            target_share,
-            air_yards_share,
-            wopr,
-            special_teams_tds::SMALLINT,
-            fantasy_points,
-            fantasy_points_ppr
+            ps.completions::SMALLINT,
+            ps.attempts::SMALLINT,
+            ps.passing_yards::SMALLINT,
+            ps.passing_tds::SMALLINT,
+            ps.passing_interceptions::SMALLINT AS interceptions,
+            ps.sacks_suffered               AS sacks,
+            ps.sack_yards_lost::SMALLINT    AS sack_yards,
+            ps.sack_fumbles::SMALLINT,
+            ps.sack_fumbles_lost::SMALLINT,
+            ps.passing_air_yards::SMALLINT,
+            ps.passing_yards_after_catch::SMALLINT,
+            ps.passing_first_downs::SMALLINT,
+            ps.passing_epa,
+            ps.passing_2pt_conversions::SMALLINT,
+            ps.pacr,
+            legacy.dakota,
+            ps.carries::SMALLINT,
+            ps.rushing_yards::SMALLINT,
+            ps.rushing_tds::SMALLINT,
+            ps.rushing_fumbles::SMALLINT,
+            ps.rushing_fumbles_lost::SMALLINT,
+            ps.rushing_first_downs::SMALLINT,
+            ps.rushing_epa,
+            ps.rushing_2pt_conversions::SMALLINT,
+            ps.receptions::SMALLINT,
+            ps.targets::SMALLINT,
+            ps.receiving_yards::SMALLINT,
+            ps.receiving_tds::SMALLINT,
+            ps.receiving_fumbles::SMALLINT,
+            ps.receiving_fumbles_lost::SMALLINT,
+            ps.receiving_air_yards::SMALLINT,
+            ps.receiving_yards_after_catch::SMALLINT,
+            ps.receiving_first_downs::SMALLINT,
+            ps.receiving_epa,
+            ps.receiving_2pt_conversions::SMALLINT,
+            ps.racr,
+            ps.target_share,
+            ps.air_yards_share,
+            ps.wopr,
+            ps.special_teams_tds::SMALLINT,
+            ps.fantasy_points,
+            ps.fantasy_points_ppr
         FROM read_parquet('{glob}', hive_partitioning=false, union_by_name=true) AS ps
-        LEFT JOIN dim_games AS g
-            ON g.season = ps.season
-            AND g.week = ps.week
-            AND (g.home_team = ps.recent_team OR g.away_team = ps.recent_team)
-            AND (
-                (ps.season_type = 'REG' AND g.game_type = 'REG')
-                OR (ps.season_type = 'POST' AND g.game_type != 'REG')
-            )
+        LEFT JOIN legacy USING (player_id, season, week, season_type)
         WHERE ps.player_id IS NOT NULL
+          AND (
+            coalesce(ps.attempts, 0) + coalesce(ps.carries, 0) + coalesce(ps.targets, 0)
+              + coalesce(ps.receptions, 0) + coalesce(ps.special_teams_tds, 0) > 0
+            OR coalesce(ps.fantasy_points, 0) <> 0
+          )
     """)
-    n = con.execute("SELECT COUNT(*) FROM fact_player_game_stats").fetchone()[0]
-    console.print(f"  [green]✓[/green] fact_player_game_stats: {n} rows")
+    con.execute("COMMIT")
+    n, lo, hi = con.execute("SELECT COUNT(*), MIN(season), MAX(season) FROM fact_player_game_stats").fetchone()
+    console.print(f"  [green]✓[/green] fact_player_game_stats: {n:,} rows ({lo}-{hi})")
 
 
 def load_fact_plays(con: duckdb.DuckDBPyConnection) -> None:
@@ -567,31 +586,108 @@ def load_fact_snap_counts(con: duckdb.DuckDBPyConnection) -> None:
     console.print(f"  [green]✓[/green] fact_snap_counts: {n:,} rows")
 
 
+def _parquet_columns(con: duckdb.DuckDBPyConnection, path: Path) -> set[str]:
+    return {r[0] for r in con.execute(f"DESCRIBE SELECT * FROM read_parquet('{path}')").fetchall()}
+
+
+def _sql_file_list(files: list[Path]) -> str:
+    return "[" + ", ".join(f"'{f}'" for f in files) + "]"
+
+
 def load_fact_depth_charts(con: duckdb.DuckDBPyConnection) -> None:
-    glob = str(SILVER_DIR / "depth_charts" / "depth_charts_*.parquet")
-    if not list((SILVER_DIR / "depth_charts").glob("*.parquet")):
+    """Weekly depth charts, one row per player per team per week.
+
+    Through 2024 nflverse published weekly NFL depth charts (club_code, week,
+    depth_team). From 2025 it publishes daily ESPN snapshots instead (dt, team,
+    pos_abb, pos_rank, no week). For those we take, for each team game, the last
+    snapshot taken in the 7 days up to game day and attach that game's
+    week/game_type from dim_games, so both formats land in the same weekly shape.
+    """
+    files = _silver_files("depth_charts")
+    if not files:
         console.print("  [yellow]fact_depth_charts: no silver files[/yellow]")
         return
-    con.execute(f"""
-        INSERT OR REPLACE INTO fact_depth_charts
-        SELECT
-            season::SMALLINT,
-            club_code,
-            week::SMALLINT,
-            game_type,
-            gsis_id,
-            full_name,
-            position,
-            depth_team::SMALLINT,
-            depth_position,
-            last_name,
-            first_name,
-            jersey_number::SMALLINT
-        FROM read_parquet('{glob}', hive_partitioning=false, union_by_name=true)
-        WHERE gsis_id IS NOT NULL AND club_code IS NOT NULL AND week IS NOT NULL
-    """)
-    n = con.execute("SELECT COUNT(*) FROM fact_depth_charts").fetchone()[0]
-    console.print(f"  [green]✓[/green] fact_depth_charts: {n:,} rows")
+    legacy, snapshot = [], []
+    for f in files:
+        cols = _parquet_columns(con, f)
+        if {"club_code", "week"} <= cols:
+            legacy.append(f)
+        elif {"dt", "team", "pos_abb", "pos_rank", "gsis_id"} <= cols:
+            snapshot.append(f)
+        else:
+            console.print(f"  [red]fact_depth_charts: unrecognized format in {f.name}, skipped[/red]")
+
+    con.execute("BEGIN TRANSACTION")
+    con.execute("DELETE FROM fact_depth_charts")
+    if legacy:
+        con.execute(f"""
+            INSERT OR REPLACE INTO fact_depth_charts
+            SELECT
+                season::SMALLINT,
+                club_code,
+                week::SMALLINT,
+                game_type,
+                gsis_id,
+                full_name,
+                position,
+                depth_team::SMALLINT,
+                depth_position,
+                last_name,
+                first_name,
+                jersey_number::SMALLINT
+            FROM read_parquet({_sql_file_list(legacy)}, hive_partitioning=false, union_by_name=true)
+            WHERE gsis_id IS NOT NULL AND club_code IS NOT NULL AND week IS NOT NULL
+        """)
+    if snapshot:
+        con.execute(f"""
+            INSERT OR REPLACE INTO fact_depth_charts
+            WITH raw AS (
+                SELECT *,
+                    regexp_extract(filename, 'depth_charts_([0-9]{{4}})', 1)::SMALLINT AS season,
+                    CAST(dt AS VARCHAR) AS snap
+                FROM read_parquet({_sql_file_list(snapshot)}, filename=true, hive_partitioning=false, union_by_name=true)
+                WHERE gsis_id IS NOT NULL AND team IS NOT NULL AND dt IS NOT NULL
+            ),
+            snaps AS (SELECT DISTINCT season, team, snap FROM raw),
+            team_games AS (
+                SELECT g.season, g.week, g.game_type, g.gameday, t.team
+                FROM dim_games g, unnest([g.home_team, g.away_team]) AS t(team)
+                WHERE g.gameday IS NOT NULL
+            ),
+            pick AS (
+                SELECT tg.season, tg.week, tg.game_type, tg.team, max(s.snap) AS snap
+                FROM team_games tg
+                JOIN snaps s
+                  ON s.season = tg.season AND s.team = tg.team
+                 -- the chart heading into this game: a snapshot from the week before it.
+                 -- Future games have no such snapshot yet, so they get no rows.
+                 AND left(s.snap, 10)::DATE BETWEEN tg.gameday::DATE - 7 AND tg.gameday::DATE
+                GROUP BY ALL
+            )
+            SELECT
+                p.season,
+                p.team                              AS club_code,
+                p.week::SMALLINT,
+                p.game_type,
+                r.gsis_id,
+                r.player_name                       AS full_name,
+                coalesce(d.position, r.pos_abb)     AS position,
+                r.pos_rank::SMALLINT                AS depth_team,
+                r.pos_abb                           AS depth_position,
+                d.last_name,
+                d.first_name,
+                NULL::SMALLINT                      AS jersey_number
+            FROM pick p
+            JOIN raw r ON r.season = p.season AND r.team = p.team AND r.snap = p.snap
+            LEFT JOIN dim_players d ON d.gsis_id = r.gsis_id
+            QUALIFY row_number() OVER (
+                PARTITION BY p.season, p.week, p.team, r.gsis_id, coalesce(d.position, r.pos_abb)
+                ORDER BY (r.pos_grp = 'Special Teams'), r.pos_rank, r.pos_slot
+            ) = 1
+        """)
+    con.execute("COMMIT")
+    n, lo, hi = con.execute("SELECT COUNT(*), MIN(season), MAX(season) FROM fact_depth_charts").fetchone()
+    console.print(f"  [green]✓[/green] fact_depth_charts: {n:,} rows ({lo}-{hi})")
 
 
 def load_fact_injuries(con: duckdb.DuckDBPyConnection) -> None:
@@ -1471,5 +1567,11 @@ def load_all(tables: list[str] | None = None) -> None:
             fn(con)
         except Exception as e:
             console.print(f"  [red]✗[/red] {name}: {e}")
+            # Loaders that wrap their work in a transaction would otherwise leave it
+            # open and every following loader would fail with "transaction aborted".
+            try:
+                con.execute("ROLLBACK")
+            except Exception:
+                pass
     con.close()
     console.print(f"\n[bold green]Done.[/bold green] Database: {GOLD_DB}")

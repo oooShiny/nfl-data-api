@@ -75,7 +75,7 @@ TEAM_COLS_BY_DATASET = {
     "schedules": ["home_team", "away_team"],
     "rosters": ["team"],
     "weekly_rosters": ["team"],
-    "depth_charts": ["club_code"],
+    "depth_charts": ["club_code", "team"],  # 2025+ files use `team`
     "snap_counts": ["team"],
     "injuries": ["team"],
     "player_stats": ["recent_team", "opponent_team"],
