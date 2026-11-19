@@ -249,6 +249,53 @@ def check():
 
 
 @app.command()
+def audit(
+    previous: Annotated[str | None, typer.Option("--previous", help="Previous last_run_counts.json, to detect row-count drops")] = None,
+    db: Annotated[str | None, typer.Option("--db", help="Database to audit (default: the gold database)")] = None,
+    json_output: Annotated[str | None, typer.Option("--json", help="Also write findings as JSON to this path")] = None,
+    strict: Annotated[bool, typer.Option("--strict", help="Exit with status 1 if any errors are found")] = False,
+):
+    """Audit the gold database for stale tables, gaps, missing games, and row-count drops."""
+    from pathlib import Path
+
+    import duckdb as _duckdb
+
+    from pipeline.audit import findings_to_json, load_previous_counts, run_audit
+    from pipeline.config import GOLD_DB
+
+    path = Path(db) if db else GOLD_DB
+    if not path.exists():
+        console.print(f"[red]Database not found: {path}[/red]")
+        raise typer.Exit(1)
+
+    con = _duckdb.connect(str(path), read_only=True)
+    try:
+        findings = run_audit(con, load_previous_counts(Path(previous) if previous else None))
+    finally:
+        con.close()
+
+    if json_output:
+        Path(json_output).write_text(findings_to_json(findings))
+
+    errors = [f for f in findings if f.severity == "error"]
+    if not findings:
+        console.print("[green]Audit passed: no issues found.[/green]")
+    else:
+        table = Table(title=f"Data audit: {len(errors)} errors, {len(findings) - len(errors)} warnings", show_header=True)
+        table.add_column("Severity")
+        table.add_column("Table", style="bold")
+        table.add_column("Check")
+        table.add_column("Details", overflow="fold")
+        for f in sorted(findings, key=lambda f: (f.severity != "error", f.table, f.check)):
+            color = "red" if f.severity == "error" else "yellow"
+            table.add_row(f"[{color}]{f.severity}[/{color}]", f.table, f.check, f.message)
+        console.print(table)
+
+    if strict and errors:
+        raise typer.Exit(1)
+
+
+@app.command()
 def ui(
     port: Annotated[int, typer.Option("--port", "-p", help="Port to run UI on")] = 4213,
 ):

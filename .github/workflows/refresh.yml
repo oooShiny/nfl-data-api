@@ -42,6 +42,13 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # Fails the job (so nothing below publishes) if a table is empty or shrank
+      # more than 10% since the last run. Staleness and gaps are warnings only.
+      - name: Audit data
+        run: |
+          set -o pipefail
+          COLUMNS=160 uv run nfl audit --previous /tmp/prev_counts.json --json /tmp/nfl_audit.json --strict 2>&1 | tee /tmp/nfl_audit.txt
+
       - name: Capture nfl check output
         run: uv run nfl check 2>&1 | tee /tmp/nfl_check.txt
         continue-on-error: true
@@ -98,6 +105,9 @@ jobs:
           report     = json.loads(open(os.environ["REPORT_JSON"]).read())
           prev       = json.loads(open("/tmp/prev_counts.json").read())
           check_out  = open("/tmp/nfl_check.txt").read()
+          audit_out  = open("/tmp/nfl_audit.txt").read() if os.path.exists("/tmp/nfl_audit.txt") else "(audit did not run)"
+          audit      = json.loads(open("/tmp/nfl_audit.json").read()) if os.path.exists("/tmp/nfl_audit.json") else []
+          n_warn     = sum(1 for f in audit if f["severity"] == "warning")
 
           prev_counts = prev.get("row_counts", {})
           curr_counts = report["row_counts"]
@@ -129,6 +139,9 @@ jobs:
               "UNMATCHED PLAYERS (" + str(report["unmatched_count"]) + " total)",
               unmatched_lines or "  None",
               "",
+              "DATA AUDIT (" + str(n_warn) + " warnings)",
+              audit_out[:4000],
+              "",
               "NFL CHECK OUTPUT",
               check_out[:3000],
           ])
@@ -137,7 +150,7 @@ jobs:
           resend.Emails.send({
               "from": "nfl-pipeline@" + os.environ["RESEND_DOMAIN"],
               "to": ["arbrown83@gmail.com"],
-              "subject": "NFL Refresh complete — " + report["run_at"][:10],
+              "subject": "NFL Refresh complete — " + report["run_at"][:10] + (" (" + str(n_warn) + " audit warnings)" if n_warn else ""),
               "text": body,
           })
           print("Report email sent.")
@@ -163,7 +176,8 @@ jobs:
               "from": "nfl-pipeline@" + os.environ["RESEND_DOMAIN"],
               "to": ["arbrown83@gmail.com"],
               "subject": "NFL Refresh FAILED",
-              "text": "The weekly NFL data refresh failed.\n\nRun: " + run_url + "\n\nCheck the Actions log for details.",
+              "text": "The weekly NFL data refresh failed.\n\nRun: " + run_url + "\n\nCheck the Actions log for details."
+                      + (("\n\nDATA AUDIT\n" + open("/tmp/nfl_audit.txt").read()[:4000]) if os.path.exists("/tmp/nfl_audit.txt") else ""),
           })
           PYEOF
         env:
