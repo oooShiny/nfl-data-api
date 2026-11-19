@@ -76,9 +76,9 @@ require __DIR__ . '/includes/header.php';
                 <tbody>
                     <tr>
                         <td>Game results &amp; box scores</td>
-                        <td>1970&ndash;<?= htmlspecialchars((string) $seasonMax) ?> <span class="endpoint-label" style="font-size: 10px;">2000 missing</span></td>
+                        <td>1970&ndash;<?= htmlspecialchars((string) $seasonMax) ?></td>
                         <td class="text-right"><?= nf($rows['dim_games'] ?? null) ?></td>
-                        <td>Final scores, dates, and a Pro-Football-Reference box score link for every game back to 1970. The 2000 season is missing from the source and isn't recoverable from this pipeline.</td>
+                        <td>Final scores and dates for every game back to 1970, each linked to its Pro-Football-Reference box score.</td>
                     </tr>
                     <tr>
                         <td>Stadium, weather, betting lines, refs, coaches</td>
@@ -125,13 +125,13 @@ require __DIR__ . '/includes/header.php';
                 <tbody>
                     <tr>
                         <td>Every play (EPA/WPA, down &amp; distance, etc.)</td>
-                        <td>1999&ndash;2025</td>
+                        <td>1999&ndash;<?= htmlspecialchars((string) $seasonMax) ?></td>
                         <td class="text-right"><?= nf($rows['fact_plays'] ?? null) ?></td>
                         <td>No pre-1999 play-by-play exists publicly, so this is the earliest possible start.</td>
                     </tr>
                     <tr>
                         <td>Pass / rush / kick play splits</td>
-                        <td>1999&ndash;2025</td>
+                        <td>1999&ndash;<?= htmlspecialchars((string) $seasonMax) ?></td>
                         <td class="text-right"><?= nf($rows['fact_pass_plays'] ?? null) ?> / <?= nf($rows['fact_rush_plays'] ?? null) ?> / <?= nf($rows['fact_kick_plays'] ?? null) ?></td>
                         <td>Convenience views over <code>fact_plays</code> filtered &amp; widened by play type.</td>
                     </tr>
@@ -143,7 +143,7 @@ require __DIR__ . '/includes/header.php';
                     </tr>
                     <tr>
                         <td>FTN charting (route, motion, blitz tags)</td>
-                        <td>2022&ndash;2025</td>
+                        <td>2022&ndash;<?= htmlspecialchars((string) $seasonMax) ?></td>
                         <td class="text-right"><?= nf($rows['fact_ftn_charting'] ?? null) ?></td>
                         <td>Manually charted play attributes not derivable from the box score.</td>
                     </tr>
@@ -180,19 +180,19 @@ require __DIR__ . '/includes/header.php';
                     </tr>
                     <tr>
                         <td>Game-by-game stat lines</td>
-                        <td>1999&ndash;2024</td>
+                        <td>1999&ndash;<?= htmlspecialchars((string) $seasonMax) ?></td>
                         <td class="text-right"><?= nf($rows['fact_player_game_stats'] ?? null) ?></td>
-                        <td>Passing/rushing/receiving/defense/kicking, one row per player per game. 2025 not yet published upstream.</td>
+                        <td>Passing/rushing/receiving and fantasy points, one row per player per game. Updated weekly during the season.</td>
                     </tr>
                     <tr>
                         <td>Season stat totals</td>
-                        <td>1999&ndash;2025</td>
+                        <td>1999&ndash;<?= htmlspecialchars((string) $seasonMax) ?></td>
                         <td class="text-right"><?= nf($rows['fact_player_season_stats'] ?? null) ?></td>
                         <td><code>GET /v1/stats/season</code> &mdash; REG, POST, and combined REG+POST rows per player-season.</td>
                     </tr>
                     <tr>
                         <td>Next Gen Stats (passing/receiving/rushing)</td>
-                        <td>2016&ndash;2025</td>
+                        <td>2016&ndash;<?= htmlspecialchars((string) $seasonMax) ?></td>
                         <td class="text-right"><?= nf($rows['fact_ngs_passing'] ?? null) ?> / <?= nf($rows['fact_ngs_receiving'] ?? null) ?> / <?= nf($rows['fact_ngs_rushing'] ?? null) ?></td>
                         <td>Tracking-derived metrics (CPOE, time to throw, separation, etc.) &mdash; only exist from 2016 on.</td>
                     </tr>
@@ -241,25 +241,25 @@ require __DIR__ . '/includes/header.php';
                     </tr>
                     <tr>
                         <td>Weekly rosters</td>
-                        <td>2002&ndash;2025</td>
+                        <td>2002&ndash;<?= htmlspecialchars((string) $seasonMax) ?></td>
                         <td class="text-right"><?= nf($rows['fact_weekly_rosters'] ?? null) ?></td>
                         <td>Active/inactive status by week.</td>
                     </tr>
                     <tr>
                         <td>Depth charts</td>
-                        <td>2001&ndash;2024</td>
+                        <td>2001&ndash;<?= htmlspecialchars((string) $seasonMax) ?></td>
                         <td class="text-right"><?= nf($rows['fact_depth_charts'] ?? null) ?></td>
-                        <td>Listed depth-chart position by week.</td>
+                        <td>Listed depth-chart position heading into each game. From 2025 this comes from daily ESPN depth charts, so bye weeks have no rows.</td>
                     </tr>
                     <tr>
                         <td>Snap counts</td>
-                        <td>2013&ndash;2025</td>
+                        <td>2013&ndash;<?= htmlspecialchars((string) $seasonMax) ?></td>
                         <td class="text-right"><?= nf($rows['fact_snap_counts'] ?? null) ?></td>
                         <td>Offensive/defensive/special teams snap percentages by game.</td>
                     </tr>
                     <tr>
                         <td>Injury reports</td>
-                        <td>2009&ndash;2025</td>
+                        <td>2009&ndash;<?= htmlspecialchars((string) $seasonMax) ?></td>
                         <td class="text-right"><?= nf($rows['fact_injuries'] ?? null) ?></td>
                         <td>Weekly injury report status (Questionable/Out/etc.).</td>
                     </tr>

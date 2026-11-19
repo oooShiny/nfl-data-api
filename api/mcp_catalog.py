@@ -17,6 +17,8 @@ Identifiers
   ref_qbr_* player_id is an ESPN ID, NOT a gsis_id; join on name or via dim_players carefully.
   Use the search_players tool to turn a name into a gsis_id.
 - Game: game_id, formatted 'SEASON_WEEK_AWAY_HOME', e.g. '2023_01_DET_KC' (week zero-padded).
+  Exceptions: ref_officials.game_id is the NFL game key (join dim_games.old_game_id) and
+  ref_qbr_week.game_id is an ESPN ID (join dim_games.espn).
 - Play: (game_id, play_id) is the key for fact_plays and all play-level tables.
 - Team: abbreviations like KC, SF, PHI. Codes differ between sources, so check
   SELECT DISTINCT on the table you query before joining tables on team:
@@ -31,8 +33,8 @@ Conventions
 - season is the year the season started (the Feb 2024 Super Bowl is season 2023).
 - season_type is 'REG' or 'POST' (fact_player_season_stats also has 'REG+POST').
   dim_games.game_type is REG, WC, DIV, CON, or SB.
-- Play-by-play (fact_plays and children) covers 1999 onward. Games go back to 1970
-  (the 2000 season is missing from dim_games). Pre-1999 scoring plays are in fact_game_scoring.
+- Play-by-play (fact_plays and children) covers 1999 onward. Games (dim_games) go back to
+  1970 with no missing seasons. Pre-1999 scoring plays are in fact_game_scoring.
 - EPA = expected points added, WPA = win probability added, CPOE = completion % over expected.
 """
 
@@ -40,7 +42,7 @@ TABLES: dict[str, dict[str, str]] = {
     # --- dimensions ---
     "dim_games": {
         "description": "One row per game: date, teams, final score, stadium/weather, betting lines, starting QBs, coaches, referee.",
-        "coverage": "1970-present (2000 season missing). Stadium, weather, lines, QBs, coaches are 1999+ only.",
+        "coverage": "1970-present. Stadium, weather, lines, QBs, coaches, referee are 1999+ only. Future games of the current season are included with NULL scores.",
         "notes": (
             "result = home_score - away_score; total = combined points. spread_line is from the home team's perspective (positive = home favored). "
             "roof is one of outdoors, dome, closed (retractable roof closed), open (retractable roof open). "
@@ -96,8 +98,8 @@ TABLES: dict[str, dict[str, str]] = {
     # --- player stats ---
     "fact_player_game_stats": {
         "description": "One row per player per game: passing, rushing, receiving, and fantasy stat lines with EPA.",
-        "coverage": "1999-2024 (latest season may lag upstream).",
-        "notes": "player_id is a gsis_id. recent_team = team for that game (uses WSH, LA codes).",
+        "coverage": "1999-present (current season through the latest completed week).",
+        "notes": "player_id is a gsis_id. recent_team = team for that game (uses WSH, LA codes). Offensive/fantasy rows only; defense and kicking are in fact_player_season_stats. dakota is NULL from 2025.",
     },
     "fact_player_season_stats": {
         "description": "Season totals per player including defense and kicking (111 columns).",
@@ -131,9 +133,9 @@ TABLES: dict[str, dict[str, str]] = {
         "notes": "",
     },
     "fact_depth_charts": {
-        "description": "Weekly depth chart position per player.",
-        "coverage": "2001-2024.",
-        "notes": "club_code is the team; depth_team 1 = starter.",
+        "description": "Depth chart position per player heading into each game.",
+        "coverage": "2001-present.",
+        "notes": "club_code is the team; depth_team 1 = starter; depth_position is the slot (LT, WR, CB, ...). Through 2024 this is the weekly NFL depth chart and includes bye weeks; from 2025 it is the ESPN depth chart from the week before each game, so bye weeks have no rows and jersey_number is NULL.",
     },
     "fact_snap_counts": {
         "description": "Offense/defense/special-teams snaps and snap share per player per game.",
@@ -184,7 +186,7 @@ TABLES: dict[str, dict[str, str]] = {
     "ref_qbr_week": {
         "description": "ESPN Total QBR per game.",
         "coverage": "Recent seasons (2006+).",
-        "notes": "player_id is an ESPN ID, not a gsis_id.",
+        "notes": "player_id is an ESPN ID, not a gsis_id. game_id is an ESPN game ID: join with dim_games.espn, not dim_games.game_id.",
     },
     "ref_pfr_adv_pass": {
         "description": "PFR advanced passing season totals: drops, bad throws, pressures, pocket time, RPO and play-action splits.",
@@ -219,7 +221,7 @@ TABLES: dict[str, dict[str, str]] = {
     "ref_officials": {
         "description": "Officiating crew assignments per game by position.",
         "coverage": "2015-present.",
-        "notes": "",
+        "notes": "game_id is the NFL's 10-digit game key (e.g. '2015091000'): join with dim_games.old_game_id, not dim_games.game_id.",
     },
     "name_resolution": {
         "description": "Pipeline mapping from raw player names in non-nflverse sources to gsis_id, with match method and confidence.",
