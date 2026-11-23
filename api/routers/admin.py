@@ -50,5 +50,8 @@ def refresh(request: Request, x_admin_token: str | None = Header(default=None)):
     counts_tmp.replace(LAST_RUN_COUNTS_FILE)
 
     request.app.state.db = get_read_only_connection()
+    # The coverage map is cached per connection; drop it so it reflects the new data.
+    from api.routers.meta import _coverage_cache
+    _coverage_cache.clear()
 
     return {"status": "ok", "size": GOLD_DB.stat().st_size}
