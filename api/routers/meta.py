@@ -55,3 +55,97 @@ def health(db: duckdb.DuckDBPyConnection = Depends(get_db)):
             pass
 
     return {"status": "ok", "row_counts": row_counts, "last_refresh": last_refresh}
+
+
+# Datasets shown on the coverage map, grouped like the Data Coverage page.
+# Each query returns (season, rows) pairs.
+COVERAGE_ROWS: list[tuple[str, str, str]] = [
+    ("Games & Schedules", "Game results",
+     "SELECT season, count(*) FROM dim_games WHERE result IS NOT NULL GROUP BY 1"),
+    ("Games & Schedules", "Weather & betting lines",
+     "SELECT season, count(*) FROM dim_games WHERE result IS NOT NULL AND spread_line IS NOT NULL GROUP BY 1"),
+    ("Games & Schedules", "Scoring plays",
+     "SELECT season, count(*) FROM fact_game_scoring GROUP BY 1"),
+    ("Games & Schedules", "Officiating crews",
+     "SELECT season, count(*) FROM ref_officials GROUP BY 1"),
+    ("Play-by-Play", "Play-by-play (EPA/WPA)",
+     "SELECT season, count(*) FROM fact_plays GROUP BY 1"),
+    ("Play-by-Play", "Personnel & formations",
+     "SELECT TRY_CAST(split_part(game_id, '_', 1) AS INTEGER), count(*) FROM fact_pbp_participation GROUP BY 1"),
+    ("Play-by-Play", "FTN charting",
+     "SELECT season, count(*) FROM fact_ftn_charting GROUP BY 1"),
+    ("Players & Stats", "Game stat lines",
+     "SELECT season, count(*) FROM fact_player_game_stats GROUP BY 1"),
+    ("Players & Stats", "Season stat totals",
+     "SELECT season, count(*) FROM fact_player_season_stats WHERE season_type = 'REG' GROUP BY 1"),
+    ("Players & Stats", "Next Gen Stats",
+     """SELECT season, count(*) FROM (SELECT season FROM fact_ngs_passing UNION ALL
+        SELECT season FROM fact_ngs_receiving UNION ALL SELECT season FROM fact_ngs_rushing) GROUP BY 1"""),
+    ("Players & Stats", "PFR advanced stats",
+     """SELECT season, count(*) FROM (SELECT season FROM ref_pfr_adv_pass UNION ALL SELECT season FROM ref_pfr_adv_rush
+        UNION ALL SELECT season FROM ref_pfr_adv_rec UNION ALL SELECT season FROM ref_pfr_adv_def) GROUP BY 1"""),
+    ("Players & Stats", "ESPN QBR",
+     "SELECT season, count(*) FROM ref_qbr_week GROUP BY 1"),
+    ("Rosters & Personnel", "Season rosters",
+     "SELECT season, count(*) FROM fact_rosters GROUP BY 1"),
+    ("Rosters & Personnel", "Weekly rosters",
+     "SELECT season, count(*) FROM fact_weekly_rosters GROUP BY 1"),
+    ("Rosters & Personnel", "Depth charts",
+     "SELECT season, count(*) FROM fact_depth_charts GROUP BY 1"),
+    ("Rosters & Personnel", "Snap counts",
+     "SELECT season, count(*) FROM fact_snap_counts GROUP BY 1"),
+    ("Rosters & Personnel", "Injury reports",
+     "SELECT season, count(*) FROM fact_injuries GROUP BY 1"),
+    ("Draft, Combine, Contracts & Trades", "Draft picks",
+     "SELECT season, count(*) FROM ref_draft_picks GROUP BY 1"),
+    ("Draft, Combine, Contracts & Trades", "Combine results",
+     "SELECT season, count(*) FROM ref_combine GROUP BY 1"),
+    ("Draft, Combine, Contracts & Trades", "Contracts",
+     "SELECT year_signed, count(*) FROM ref_contracts WHERE year_signed > 0 GROUP BY 1"),
+    ("Draft, Combine, Contracts & Trades", "Trades",
+     "SELECT season, count(*) FROM ref_trades GROUP BY 1"),
+    ("Teams & Ratings", "Elo ratings (538)",
+     "SELECT season, count(*) FROM ref_team_elo GROUP BY 1"),
+]
+
+# Computed once per database connection; /v1/admin/refresh swaps the connection.
+_coverage_cache: dict[int, dict] = {}
+
+
+@router.get("/coverage")
+def coverage(db: duckdb.DuckDBPyConnection = Depends(get_db)):
+    """Rows per season for each dataset, for the coverage map on the website."""
+    cached = _coverage_cache.get(id(db))
+    if cached is not None:
+        return cached
+
+    cur = db.cursor()
+    try:
+        current_season, in_progress = cur.execute("""
+            SELECT season, bool_or(result IS NULL)
+            FROM dim_games WHERE season = (SELECT max(season) FROM dim_games WHERE result IS NOT NULL)
+            GROUP BY season""").fetchone()
+        games = {int(s): int(n) for s, n in cur.execute(
+            "SELECT season, count(*) FROM dim_games WHERE result IS NOT NULL GROUP BY 1").fetchall()}
+        groups: dict[str, list[dict]] = {}
+        for group, label, sql in COVERAGE_ROWS:
+            try:
+                seasons = {int(s): int(n) for s, n in cur.execute(sql).fetchall() if s is not None and s > 0}
+            except duckdb.Error:
+                seasons = {}
+            groups.setdefault(group, []).append({"label": label, "seasons": seasons})
+    finally:
+        cur.close()
+
+    all_seasons = [s for rows in groups.values() for r in rows for s in r["seasons"]]
+    result = {
+        "season_min": min(all_seasons, default=None),
+        "season_max": max(all_seasons, default=None),
+        "current_season": current_season,
+        "current_season_in_progress": bool(in_progress),
+        "games_per_season": games,
+        "groups": [{"name": name, "rows": rows} for name, rows in groups.items()],
+    }
+    _coverage_cache.clear()
+    _coverage_cache[id(db)] = result
+    return result

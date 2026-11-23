@@ -16,6 +16,91 @@ function nf($n) {
     return $n === null ? '&mdash;' : number_format($n);
 }
 
+// ── Coverage map ────────────────────────────────────────────────────────────
+// One row per dataset, one column per season (1920-69 folded into one column).
+// Each cell is shaded by that season's rows per game played, relative to the
+// dataset's typical (median) season. Dividing by games keeps short schedules
+// (14-game 1970s seasons, the 1982 strike, the season in progress) from
+// looking incomplete when every game is covered.
+$coverage = nfl_api_get_cached('/coverage', [], 21600);
+$covFirst = 1970;  // seasons before this are folded into one "pre" column
+
+function cov_median(array $values): float {
+    sort($values);
+    $n = count($values);
+    if ($n === 0) return 0;
+    return $n % 2 ? $values[intdiv($n, 2)] : ($values[$n / 2 - 1] + $values[$n / 2]) / 2;
+}
+
+function cov_level_ratio(float $rate, float $median): int {
+    if ($median <= 0) return 3;
+    $ratio = $rate / $median;
+    return $ratio >= 0.8 ? 3 : ($ratio >= 0.35 ? 2 : 1);
+}
+
+$covLevelNames = [0 => 'No data', 1 => 'Sparse', 2 => 'Partial', 3 => 'Full season'];
+$covGroups = [];
+$covLast = null;
+$covInProgress = false;
+if ($coverage && !empty($coverage['groups'])) {
+    $covLast = (int) $coverage['season_max'];
+    $current = (int) ($coverage['current_season'] ?? $covLast);
+    $covInProgress = !empty($coverage['current_season_in_progress']);
+    $covGames = [];
+    foreach (($coverage['games_per_season'] ?? []) as $season => $n) {
+        $covGames[(int) $season] = max(1, (int) $n);
+    }
+    $perGame = fn(int $season, int $count): float => $count / ($covGames[$season] ?? 1);
+    foreach ($coverage['groups'] as $group) {
+        $rowsOut = [];
+        foreach ($group['rows'] as $row) {
+            $bySeason = [];
+            foreach ($row['seasons'] as $season => $count) {
+                $bySeason[(int) $season] = (int) $count;
+            }
+            // Typical rows per game, from 1970 on (games data starts there) and
+            // ignoring the season still being played.
+            $rates = [];
+            foreach ($bySeason as $s => $c) {
+                if ($s >= $covFirst && !($covInProgress && $s === $current)) {
+                    $rates[] = $perGame($s, $c);
+                }
+            }
+            $median = cov_median($rates);
+
+            $present = array_keys($bySeason);
+            $span = $present ? min($present) . '&ndash;' . max($present) : 'none';
+
+            // Folded pre-1970 cell: share of those seasons with data.
+            $preSeasons = array_filter($present, fn($s) => $s < $covFirst);
+            $pre = null;
+            if ($preSeasons) {
+                $preRows = array_sum(array_intersect_key($bySeason, array_flip($preSeasons)));
+                $preSpan = $covFirst - min($preSeasons);
+                $pre = [
+                    'level' => count($preSeasons) >= 0.9 * $preSpan ? 3 : (count($preSeasons) >= 0.35 * $preSpan ? 2 : 1),
+                    'tip' => sprintf('%d of %d seasons, %s rows', count($preSeasons), $preSpan, number_format($preRows)),
+                ];
+            }
+
+            $cells = [];
+            for ($season = $covFirst; $season <= $covLast; $season++) {
+                $count = $bySeason[$season] ?? 0;
+                $level = $count ? cov_level_ratio($perGame($season, $count), $median) : 0;
+                $note = ($covInProgress && $season === $current) ? ' (season in progress)' : '';
+                $cells[] = [
+                    'season' => $season,
+                    'level' => $level,
+                    'live' => $note !== '',
+                    'tip' => $count ? number_format($count) . ' rows &middot; ' . $covLevelNames[$level] . $note : 'No data',
+                ];
+            }
+            $rowsOut[] = ['label' => $row['label'], 'span' => $span, 'pre' => $pre, 'cells' => $cells];
+        }
+        $covGroups[] = ['name' => $group['name'], 'rows' => $rowsOut];
+    }
+}
+
 require __DIR__ . '/includes/header.php';
 ?>
 
@@ -54,6 +139,118 @@ require __DIR__ . '/includes/header.php';
         </div>
     </div>
 </section>
+
+<!-- ===== COVERAGE MAP ===== -->
+<?php if ($covGroups): $covCols = $covLast - $covFirst + 1; ?>
+<style>
+    .cov-intro { padding-top: var(--sp-3, 16px); }
+    .cov-wrap { overflow-x: auto; padding-bottom: var(--sp-3, 16px); }
+    .cov-map {
+        --lvl-0: #ececec; --lvl-1: #86b6ef; --lvl-2: #3987e5; --lvl-3: #184f95;
+        display: grid;
+        grid-template-columns: max-content 64px repeat(var(--cols), minmax(6px, 1fr));
+        gap: 2px;
+        min-width: 640px;
+        align-items: center;
+        font-size: var(--fs-small, 1rem);
+    }
+    .cov-axis { font-family: var(--font-mono, monospace); font-size: 0.8125rem; color: var(--text-muted); white-space: nowrap; line-height: 1.2; overflow: visible; }
+    .cov-axis.pre { text-align: left; }
+    .cov-group span { position: sticky; left: 0; }
+    .cov-group { grid-column: 1 / -1; font-weight: 700; margin: var(--sp-3, 16px) 0 var(--sp-1, 4px); border-bottom: 1px solid var(--border-light); }
+    .cov-label { color: var(--text); white-space: nowrap; padding-right: var(--sp-3, 16px); line-height: 1.35;
+                 position: sticky; left: 0; z-index: 1; background: var(--bg, #fff); }
+    .cov-cell { height: 16px; border-radius: 2px; background: var(--lvl-0); }
+    .cov-cell.l1 { background: var(--lvl-1); }
+    .cov-cell.l2 { background: var(--lvl-2); }
+    .cov-cell.l3 { background: var(--lvl-3); }
+    .cov-cell.pre { margin-right: 4px; }
+    .cov-cell.none-pre { background: transparent; }
+    .cov-cell.live { background-image: repeating-linear-gradient(135deg, rgba(255,255,255,0.65) 0 2px, transparent 2px 5px); }
+    .cov-cell[data-t]:hover { outline: 2px solid var(--text); outline-offset: 1px; }
+    .cov-legend { display: flex; flex-wrap: wrap; gap: var(--sp-1, 4px) var(--sp-4, 24px); margin: 0 0 var(--sp-2, 8px); font-size: var(--fs-small, 1rem); color: var(--text-muted); }
+    .cov-legend span { display: inline-flex; align-items: center; gap: var(--sp-2, 8px); }
+    .cov-legend i { display: inline-block; width: 16px; height: 16px; border-radius: 2px; }
+    .cov-tip {
+        position: fixed; z-index: 80; pointer-events: none; display: none; max-width: 300px;
+        background: var(--bg, #fff); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius, 2px);
+        padding: var(--sp-2, 8px) var(--sp-3, 16px); font-size: var(--fs-small, 1rem); line-height: 1.4;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.18);
+    }
+    .cov-tip b { display: block; }
+    .cov-tip small { display: block; color: var(--text-muted); font-size: inherit; }
+</style>
+<section style="margin-top: 38px;">
+    <div class="section-header blue">
+        <h2>Coverage Map</h2>
+        <span class="endpoint-label">GET /v1/coverage</span>
+    </div>
+    <div class="page-pinstripe"></div>
+    <div class="section-body">
+        <div class="cov-intro">
+            <p>
+                Each square is one season of one dataset, shaded by how much data it has per game played, compared with a typical season for that dataset. Hover over or tap a square for the row count. The tables below list the same coverage in detail.
+            </p>
+            <div class="cov-legend" aria-hidden="true">
+                <span><i style="background: #184f95;"></i>Full season (80%+ of typical)</span>
+                <span><i style="background: #3987e5;"></i>Partial (35&ndash;80% of typical)</span>
+                <span><i style="background: #86b6ef;"></i>Sparse (under 35%)</span>
+                <span><i style="background: #ececec;"></i>No data</span>
+                <?php if ($covInProgress): ?>
+                <span><i style="background: #3987e5 repeating-linear-gradient(135deg, rgba(255,255,255,0.65) 0 2px, transparent 2px 5px);"></i><?= $covLast ?> season in progress</span>
+                <?php endif; ?>
+            </div>
+        </div>
+        <div class="cov-wrap">
+            <div class="cov-map" style="--cols: <?= $covCols ?>;" role="img"
+                 aria-label="Coverage map: rows per season for each dataset from 1920 to <?= $covLast ?>. The tables below give the same coverage as text.">
+                <div></div>
+                <div class="cov-axis pre">1920&ndash;69</div>
+                <?php for ($season = $covFirst; $season <= $covLast; $season++): ?>
+                    <div class="cov-axis"><?= ($season % 10 === 0) ? $season : '' ?></div>
+                <?php endfor; ?>
+                <?php foreach ($covGroups as $group): ?>
+                    <div class="cov-group"><span><?= htmlspecialchars($group['name']) ?></span></div>
+                    <?php foreach ($group['rows'] as $row): $label = htmlspecialchars($row['label']); ?>
+                        <div class="cov-label"><?= $label ?></div>
+                        <?php if ($row['pre']): ?>
+                            <div class="cov-cell pre l<?= $row['pre']['level'] ?>" data-t="<?= $label ?>" data-s="1920&ndash;1969" data-r="<?= $row['span'] ?>" data-d="<?= $row['pre']['tip'] ?>"></div>
+                        <?php else: ?>
+                            <div class="cov-cell pre none-pre"></div>
+                        <?php endif; ?>
+                        <?php foreach ($row['cells'] as $c): ?><div class="cov-cell l<?= $c['level'] ?><?= $c['live'] ? ' live' : '' ?>" data-t="<?= $label ?>" data-s="<?= $c['season'] ?>" data-r="<?= $row['span'] ?>" data-d="<?= $c['tip'] ?>"></div><?php endforeach; ?>
+                    <?php endforeach; ?>
+                <?php endforeach; ?>
+            </div>
+        </div>
+    </div>
+</section>
+<div class="cov-tip" id="cov-tip" role="tooltip"></div>
+<script>
+(function () {
+    var tip = document.getElementById('cov-tip');
+    var map = document.querySelector('.cov-map');
+    if (!tip || !map) return;
+    // On narrow screens the map scrolls sideways; start at the most recent seasons.
+    var wrap = map.parentElement;
+    if (wrap.scrollWidth > wrap.clientWidth) wrap.scrollLeft = wrap.scrollWidth;
+    function show(e) {
+        var cell = e.target.closest('.cov-cell[data-t]');
+        if (!cell) { tip.style.display = 'none'; return; }
+        tip.innerHTML = '<b>' + cell.dataset.t + ', ' + cell.dataset.s + '</b>' + cell.dataset.d + '<small>Dataset covers ' + cell.dataset.r + '</small>';
+        tip.style.display = 'block';
+        var x = e.clientX + 14, y = e.clientY + 14, r = tip.getBoundingClientRect();
+        if (x + r.width > window.innerWidth - 8) x = e.clientX - r.width - 14;
+        if (y + r.height > window.innerHeight - 8) y = e.clientY - r.height - 14;
+        tip.style.left = x + 'px'; tip.style.top = y + 'px';
+    }
+    map.addEventListener('pointermove', show);
+    map.addEventListener('pointerdown', show);  // taps on touch screens
+    wrap.addEventListener('scroll', function () { tip.style.display = 'none'; });
+    map.addEventListener('pointerleave', function () { tip.style.display = 'none'; });
+})();
+</script>
+<?php endif; ?>
 
 <!-- ===== GAMES & SCHEDULES ===== -->
 <section style="margin-top: 38px;">
