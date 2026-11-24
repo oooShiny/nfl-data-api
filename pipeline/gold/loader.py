@@ -1259,7 +1259,11 @@ def load_fact_player_season_stats(con: duckdb.DuckDBPyConnection) -> None:
 
 
 def load_ref_team_stats(con: duckdb.DuckDBPyConnection) -> None:
-    glob = str(SILVER_DIR / "stats_team" / "stats_team_regpost_*.parquet")
+    # nflverse's regpost files label non-playoff teams 'REG' and playoff teams
+    # only 'REG+POST', so on their own they leave playoff teams out of REG.
+    # Load the reg and post files too; regpost goes last and only adds
+    # REG+POST rows (its REG rows equal the reg file's).
+    globs = [str(SILVER_DIR / "stats_team" / f"stats_team_{kind}_*.parquet") for kind in ("reg", "post", "regpost")]
     if not list((SILVER_DIR / "stats_team").glob("*.parquet")):
         console.print("  [yellow]ref_team_stats: no silver files[/yellow]")
         return
@@ -1293,7 +1297,10 @@ def load_ref_team_stats(con: duckdb.DuckDBPyConnection) -> None:
         "pat_made", "pat_att", "pat_missed", "pat_blocked", "pat_pct",
         "gwfg_made", "gwfg_att", "gwfg_missed", "gwfg_blocked",
     ]
-    n = _load_via_select(con, "ref_team_stats", glob, cols)
+    n = 0
+    for glob in globs:
+        if list((SILVER_DIR / "stats_team").glob(Path(glob).name)):
+            n = _load_via_select(con, "ref_team_stats", glob, cols)
     console.print(f"  [green]✓[/green] ref_team_stats: {n:,} rows")
 
 

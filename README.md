@@ -151,7 +151,7 @@ Sourced from [nflverse-data](https://github.com/nflverse/nflverse-data) public r
 |---|---|---|
 | `fact_player_game_stats` | 134K | Weekly passing/rushing/receiving box-score stats, advanced metrics (EPA, PACR, DAKOTA, RACR, target/air-yards share, WOPR), fantasy points |
 | `fact_player_season_stats` | 12K | Season-total player stats — adds defense, special teams, and kicking to the weekly stats above |
-| `ref_team_stats` | 336 | Season-total team offense/defense box scores |
+| `ref_team_stats` | 1.5K | Season-total team offense/defense box scores (REG, POST, and REG+POST) |
 | `fact_historical_player_season_stats` | 2K | Pre-1999 player passing/rushing/receiving season totals summed from `fact_historical_plays` (`source = 'pfr_pbp'`), checked against PFR's official season tables |
 | `fact_historical_team_season_stats` | 126 | Pre-1999 team passing/rushing season totals, same source |
 | `fact_snap_counts` | 325K | Offense/defense/special-teams snap counts and percentages per player per game |

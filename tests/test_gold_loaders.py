@@ -103,3 +103,33 @@ def test_roster_team_codes_follow_dim_games_before_1999():
     })
     # STL is the Cardinals through 1987 and the Rams from 1995; 1999+ uses today's codes.
     assert _clean_rosters(df)["team"].to_list() == ["SLC", "LA", "LA", "PHX", "NE", "STL", "OAK", "LA", "LV"]
+
+
+def test_ref_team_stats_keeps_playoff_teams_in_reg(tmp_path, monkeypatch):
+    import duckdb
+    import polars as pl
+
+    from pipeline.gold import loader
+    from pipeline.gold.schema import SCHEMA_SQL
+
+    con = duckdb.connect()
+    con.execute(SCHEMA_SQL)
+    cols = [r[0] for r in con.execute("DESCRIBE ref_team_stats").fetchall()]
+    (tmp_path / "stats_team").mkdir()
+
+    def write(kind, rows):
+        df = pl.DataFrame([{c: None for c in cols} | r for r in rows],
+                          schema={c: (pl.Int64 if c in ("season", "games", "attempts") else pl.Utf8) for c in cols})
+        df.write_parquet(tmp_path / "stats_team" / f"stats_team_{kind}_2024.parquet")
+
+    # KC made the playoffs, NYG didn't: nflverse's regpost file has KC only as REG+POST.
+    write("reg", [dict(season=2024, team="KC", season_type="REG", attempts=500),
+                  dict(season=2024, team="NYG", season_type="REG", attempts=520)])
+    write("post", [dict(season=2024, team="KC", season_type="POST", attempts=90)])
+    write("regpost", [dict(season=2024, team="KC", season_type="REG+POST", attempts=590),
+                      dict(season=2024, team="NYG", season_type="REG", attempts=520)])
+    monkeypatch.setattr(loader, "SILVER_DIR", tmp_path)
+    loader.load_ref_team_stats(con)
+
+    rows = con.execute("SELECT team, season_type, attempts FROM ref_team_stats ORDER BY 1, 2").fetchall()
+    assert rows == [("KC", "POST", 90), ("KC", "REG", 500), ("KC", "REG+POST", 590), ("NYG", "REG", 520)]
