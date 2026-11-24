@@ -2,12 +2,35 @@ name: Deploy API
 
 on:
   workflow_dispatch:
+  # After each successful weekly refresh, so the app always runs current main.
+  workflow_run:
+    workflows: ["Weekly NFL Data Refresh"]
+    types: [completed]
+  # And when a merge changes the app itself. The refresh's own commit (the
+  # row-counts file) is outside these paths.
+  push:
+    branches: [main]
+    paths:
+      - "api/**"
+      - "pipeline/**"
+      - "Dockerfile"
+      - "fly.toml"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/deploy.yml"
+
+# One deploy at a time; a newer one waits rather than cancelling a deploy mid-way.
+concurrency:
+  group: deploy-api
+  cancel-in-progress: false
 
 env:
   FLY_APP: nfl-data-api
 
 jobs:
   deploy:
+    # workflow_run fires on every completion; skip failed or cancelled refreshes.
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
