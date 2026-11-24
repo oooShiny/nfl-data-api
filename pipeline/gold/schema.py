@@ -99,20 +99,74 @@ CREATE TABLE IF NOT EXISTS dim_games (
     boxscore_url    VARCHAR
 );
 
--- Scoring-play summaries for the historical (1970-1997) games in dim_games —
--- coarser than fact_plays (one row per scoring event, not every play).
+-- One row per scoring event (a touchdown's PAT/2-pt try is folded into its
+-- row), coarser than fact_plays. source = 'pfr': PFR scoring summaries,
+-- 1970 through part of 2007. source = 'nflverse': derived from nflverse
+-- play-by-play for the remaining 2007+ games (description is nflverse's
+-- play text, not PFR's summary style).
 CREATE TABLE IF NOT EXISTS fact_game_scoring (
     game_id         VARCHAR,
     season          SMALLINT,
     gameday         DATE,
     play_seq        INTEGER,
     quarter         SMALLINT,
-    time            VARCHAR,
+    time            VARCHAR,              -- seconds left in the quarter
     scoring_team    VARCHAR,
     home_score      SMALLINT,             -- running score after this play
     away_score      SMALLINT,
     description     VARCHAR,
     boxscore_url    VARCHAR,
+    source          VARCHAR,              -- 'pfr' or 'nflverse'
+    PRIMARY KEY (game_id, play_seq)
+);
+-- For databases created before the source column existed.
+ALTER TABLE fact_game_scoring ADD COLUMN IF NOT EXISTS source VARCHAR;
+
+-- Full play-by-play for pre-1999 games, scraped from Pro-Football-Reference
+-- boxscores (scripts/scrape-pfr-pbp.mjs). Not the same shape as fact_plays:
+-- PFR gives only prose descriptions, so play_type, yards_gained, touchdown and
+-- the player-role columns are parsed from `description` (free-text names, not
+-- gsis_ids), and there is no possession team. exp_pts_* are PFR's own
+-- expected-points values, not nflfastR's.
+CREATE TABLE IF NOT EXISTS fact_historical_plays (
+    game_id                 VARCHAR,
+    play_seq                INTEGER,      -- order within the game, from 1
+    season                  SMALLINT,
+    week                    SMALLINT,
+    game_type               VARCHAR,
+    home_team               VARCHAR,      -- dim_games codes (historical: OAK, STL, ...)
+    away_team               VARCHAR,
+    quarter                 SMALLINT,     -- 5 = overtime
+    clock                   VARCHAR,      -- 'MM:SS' left in quarter; often NULL in source
+    down                    SMALLINT,
+    ydstogo                 SMALLINT,
+    yardline_side           VARCHAR,      -- whose side of the field the ball is on
+    yardline                SMALLINT,     -- 1-50 from that side's goal line
+    location_raw            VARCHAR,      -- PFR's original, e.g. 'NWE 35'
+    away_score              SMALLINT,     -- running score after the play
+    home_score              SMALLINT,
+    description             VARCHAR,
+    exp_pts_before          DOUBLE,
+    exp_pts_after           DOUBLE,
+    play_type               VARCHAR,      -- pass, run, punt, kickoff, field_goal, extra_point,
+                                          -- qb_kneel, qb_spike, no_play, other; NULL for coin toss etc.
+    two_point_attempt       BOOLEAN,
+    yards_gained            SMALLINT,     -- pass/run/sack/kneel plays only
+    touchdown               BOOLEAN,
+    passer                  VARCHAR,
+    rusher                  VARCHAR,
+    receiver                VARCHAR,
+    interceptor             VARCHAR,
+    sacker                  VARCHAR,
+    kicker                  VARCHAR,
+    punter                  VARCHAR,
+    returner                VARCHAR,
+    tackler_1               VARCHAR,
+    tackler_2               VARCHAR,
+    forced_fumble_player    VARCHAR,
+    fumble_recovery_player  VARCHAR,
+    penalized_player        VARCHAR,
+    boxscore_url            VARCHAR,
     PRIMARY KEY (game_id, play_seq)
 );
 

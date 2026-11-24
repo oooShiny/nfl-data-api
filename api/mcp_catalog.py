@@ -34,7 +34,8 @@ Conventions
 - season_type is 'REG' or 'POST' (fact_player_season_stats also has 'REG+POST').
   dim_games.game_type is REG, WC, DIV, CON, or SB.
 - Play-by-play (fact_plays and children) covers 1999 onward. Games (dim_games) go back to
-  1970 with no missing seasons. Pre-1999 scoring plays are in fact_game_scoring.
+  1970 with no missing seasons. Scoring-play summaries for every season are in fact_game_scoring, and
+  pre-1999 full play-by-play (being back-filled season by season) is in fact_historical_plays.
 - EPA = expected points added, WPA = win probability added, CPOE = completion % over expected.
 """
 
@@ -91,9 +92,14 @@ TABLES: dict[str, dict[str, str]] = {
         "notes": "Join to fact_plays on (game_id, play_id).",
     },
     "fact_game_scoring": {
-        "description": "One row per scoring play for older games (TD/FG/safety), with running score and description.",
-        "coverage": "1970-1997. Use fact_plays for 1999+.",
-        "notes": "",
+        "description": "One row per scoring play (TD/FG/safety; a TD's PAT/2-pt try is folded into its row), with running score after the play and a description.",
+        "coverage": "1970-present. source='pfr' (PFR scoring summaries) through part of 2007; source='nflverse' (derived from nflverse play-by-play) after that. A handful of 2007+ games whose nflverse running score is inconsistent are omitted. For 1999+ prefer fact_plays for play-level detail.",
+        "notes": "time is seconds left in the quarter. Description style differs by source: PFR summaries ('X 10 yard pass from Y (Z kick)') vs nflverse play text. Team codes follow dim_games: historical codes before 1999, current franchise codes (LV, LAC, LA) from 1999.",
+    },
+    "fact_historical_plays": {
+        "description": "Full play-by-play for pre-1999 games from Pro-Football-Reference: down, distance, field position, running score, description, PFR expected points, plus play_type/yards_gained/touchdown and player names parsed from the description.",
+        "coverage": "Pre-1999, back-filled one season at a time from 1998 backward; check SELECT DISTINCT season. Use fact_plays for 1999+.",
+        "notes": "Key is (game_id, play_seq). Player columns (passer, rusher, receiver, ...) are free-text names, not gsis_ids. No possession team column. quarter 5 = overtime. clock is often NULL in the source. Team codes match dim_games historical codes.",
     },
     # --- player stats ---
     "fact_player_game_stats": {

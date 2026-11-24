@@ -10,7 +10,7 @@ router = APIRouter(tags=["meta"])
 
 GOLD_TABLES = [
     "dim_players", "dim_teams", "dim_games",
-    "fact_game_scoring",
+    "fact_game_scoring", "fact_historical_plays",
     "fact_plays", "fact_pass_plays", "fact_rush_plays", "fact_kick_plays",
     "fact_pbp_participation", "fact_ftn_charting",
     "fact_player_game_stats", "fact_player_season_stats", "fact_weekly_rosters", "fact_rosters",
@@ -70,6 +70,8 @@ COVERAGE_ROWS: list[tuple[str, str, str]] = [
      "SELECT season, count(*) FROM ref_officials GROUP BY 1"),
     ("Play-by-Play", "Play-by-play (EPA/WPA)",
      "SELECT season, count(*) FROM fact_plays GROUP BY 1"),
+    ("Play-by-Play", "Historical play-by-play (PFR)",
+     "SELECT season, count(*) FROM fact_historical_plays GROUP BY 1"),
     ("Play-by-Play", "Personnel & formations",
      "SELECT TRY_CAST(split_part(game_id, '_', 1) AS INTEGER), count(*) FROM fact_pbp_participation GROUP BY 1"),
     ("Play-by-Play", "FTN charting",

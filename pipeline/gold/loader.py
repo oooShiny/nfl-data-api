@@ -1469,7 +1469,7 @@ def load_fact_game_scoring(con: duckdb.DuckDBPyConnection) -> None:
     glob = str(SILVER_DIR / "historical_scoring" / "*.parquet")
     con.execute("DELETE FROM fact_game_scoring")
     con.execute(f"""
-        INSERT INTO fact_game_scoring
+        INSERT INTO fact_game_scoring ({_SCORING_COLUMNS})
         SELECT
             game_id,
             season::SMALLINT,
@@ -1481,12 +1481,146 @@ def load_fact_game_scoring(con: duckdb.DuckDBPyConnection) -> None:
             home_score::SMALLINT,
             away_score::SMALLINT,
             description,
-            boxscore_url
+            boxscore_url,
+            'pfr'
         FROM read_parquet('{glob}', union_by_name=true)
         WHERE game_id IS NOT NULL
     """)
+    n_pfr = con.execute("SELECT COUNT(*) FROM fact_game_scoring").fetchone()[0]
+    derived = _insert_scoring_from_pbp(con)
     n = con.execute("SELECT COUNT(*) FROM fact_game_scoring").fetchone()[0]
-    console.print(f"  [green]✓[/green] fact_game_scoring: {n:,} rows")
+    console.print(f"  [green]✓[/green] fact_game_scoring: {n:,} rows "
+                  f"({n_pfr:,} from PFR, {n - n_pfr:,} derived from nflverse play-by-play)")
+    if derived["skipped"]:
+        console.print(f"    [dim]skipped {derived['skipped']} games whose derived scores "
+                      f"don't check out (final score mismatch or merged events)[/dim]")
+
+
+_SCORING_COLUMNS = ("game_id, season, gameday, play_seq, quarter, time, scoring_team, "
+                    "home_score, away_score, description, boxscore_url, source")
+
+# The PFR scoring summaries stop partway through 2007; from 2007 on, games
+# without them get scoring plays derived from nflverse play-by-play.
+SCORING_FROM_PBP_MIN_SEASON = 2007
+
+
+def _insert_scoring_from_pbp(con: duckdb.DuckDBPyConnection) -> dict[str, int]:
+    """Derive one row per scoring event from nflverse play-by-play.
+
+    A scoring event is a play where the running score goes up; the PAT or
+    two-point try after a touchdown is folded into the touchdown's row, so
+    the running score matches PFR's convention (score after the try). The
+    try is recognised by nflverse's attempt flags, or as a 1-2 point gain by
+    the team that just scored a touchdown (tries after a penalty are not
+    always flagged). nflverse's running totals occasionally dip on glitch
+    rows, so the running max is used. Games whose derived final score
+    doesn't match dim_games, or that have an impossible event (a missed
+    score update merging two scores), are left out rather than guessed at.
+    """
+    if not list((SILVER_DIR / "pbp").glob("play_by_play_*.parquet")):
+        return {"skipped": 0}
+    glob = str(SILVER_DIR / "pbp" / "play_by_play_*.parquet")
+    con.execute(f"""
+        CREATE OR REPLACE TEMP TABLE _scoring_pbp AS
+        WITH raw AS (
+            SELECT game_id, play_id, season, qtr, quarter_seconds_remaining, "desc",
+                   home_team, away_team, touchdown, extra_point_attempt, two_point_attempt,
+                   max(coalesce(total_home_score, 0)) OVER w1 AS h,
+                   max(coalesce(total_away_score, 0)) OVER w1 AS a
+            FROM read_parquet('{glob}', union_by_name=true)
+            WHERE season >= {SCORING_FROM_PBP_MIN_SEASON}
+              AND game_id NOT IN (SELECT game_id FROM fact_game_scoring)
+            WINDOW w1 AS (PARTITION BY game_id ORDER BY play_id ROWS UNBOUNDED PRECEDING)
+        ),
+        chg AS (
+            SELECT *, h - lag(h, 1, 0) OVER w2 AS dh, a - lag(a, 1, 0) OVER w2 AS da
+            FROM raw
+            WINDOW w2 AS (PARTITION BY game_id ORDER BY play_id)
+        ),
+        ev AS (
+            SELECT *, CASE WHEN dh > 0 THEN home_team ELSE away_team END AS team, dh + da AS pts
+            FROM chg WHERE dh <> 0 OR da <> 0
+        ),
+        tagged AS (
+            SELECT *,
+                   ((coalesce(extra_point_attempt, 0) = 1 OR coalesce(two_point_attempt, 0) = 1)
+                        AND coalesce(touchdown, 0) = 0)
+                   OR (pts IN (1, 2) AND lag(pts) OVER w3 = 6 AND lag(team) OVER w3 = team
+                       AND "desc" NOT ILIKE '%safety%') AS is_try
+            FROM ev
+            WINDOW w3 AS (PARTITION BY game_id ORDER BY play_id)
+        ),
+        grouped AS (
+            SELECT *, sum(CASE WHEN is_try THEN 0 ELSE 1 END)
+                          OVER (PARTITION BY game_id ORDER BY play_id) AS grp
+            FROM tagged
+        )
+        SELECT game_id,
+               any_value(season)                                     AS season,
+               grp                                                   AS play_seq,
+               arg_min(qtr, play_id)                                 AS quarter,
+               arg_min(quarter_seconds_remaining, play_id)::INTEGER  AS secs,
+               arg_min(team, play_id)                                AS scoring_team,
+               arg_max(h, play_id)                                   AS home_score,
+               arg_max(a, play_id)                                   AS away_score,
+               regexp_replace(arg_min("desc", play_id), '^\\(\\s*[0-9:]*\\)\\s*', '') AS description
+        FROM grouped
+        WHERE grp > 0          -- a lone try before any event would be a data error
+        GROUP BY game_id, grp
+    """)
+    con.execute("""
+        CREATE OR REPLACE TEMP TABLE _scoring_ok AS
+        SELECT s.game_id
+        FROM (SELECT game_id, arg_max(home_score, play_seq) AS h, arg_max(away_score, play_seq) AS a
+              FROM _scoring_pbp GROUP BY 1) s
+        JOIN dim_games g USING (game_id)
+        WHERE s.h = g.home_score AND s.a = g.away_score
+          -- A missed score update merges two events into one; no single
+          -- scoring play (with its try) is worth 4, 5, or more than 8.
+          AND s.game_id NOT IN (
+              SELECT game_id FROM (
+                  SELECT game_id, home_score + away_score
+                         - coalesce(lag(home_score + away_score) OVER (PARTITION BY game_id ORDER BY play_seq), 0) AS pts
+                  FROM _scoring_pbp)
+              WHERE pts IN (4, 5) OR pts > 8)
+    """)
+    con.execute(f"""
+        INSERT INTO fact_game_scoring ({_SCORING_COLUMNS})
+        SELECT s.game_id, s.season::SMALLINT, g.gameday, s.play_seq::INTEGER, s.quarter::SMALLINT,
+               s.secs::VARCHAR, s.scoring_team, s.home_score::SMALLINT, s.away_score::SMALLINT,
+               s.description,
+               CASE WHEN g.pfr IS NOT NULL
+                    THEN 'https://www.pro-football-reference.com/boxscores/' || g.pfr || '.htm' END,
+               'nflverse'
+        FROM _scoring_pbp s
+        JOIN _scoring_ok USING (game_id)
+        JOIN dim_games g USING (game_id)
+    """)
+    skipped = con.execute(
+        "SELECT count(DISTINCT game_id) FROM _scoring_pbp WHERE game_id NOT IN (SELECT game_id FROM _scoring_ok)"
+    ).fetchone()[0]
+    con.execute("DROP TABLE _scoring_pbp")
+    con.execute("DROP TABLE _scoring_ok")
+    return {"skipped": skipped}
+
+
+def load_fact_historical_plays(con: duckdb.DuckDBPyConnection) -> None:
+    files = _silver_files("historical_pbp")
+    if not files:
+        console.print("  [yellow]fact_historical_plays: no silver files found[/yellow]")
+        return
+    glob = str(SILVER_DIR / "historical_pbp" / "*.parquet")
+    cols = [r[0] for r in con.execute("SELECT column_name FROM information_schema.columns "
+                                      "WHERE table_name = 'fact_historical_plays' ORDER BY ordinal_position").fetchall()]
+    con.execute("DELETE FROM fact_historical_plays")
+    con.execute(f"""
+        INSERT INTO fact_historical_plays ({", ".join(cols)})
+        SELECT {", ".join(cols)}
+        FROM read_parquet('{glob}', union_by_name=true)
+        WHERE game_id IS NOT NULL AND season <= 1998
+    """)
+    n = con.execute("SELECT COUNT(*) FROM fact_historical_plays").fetchone()[0]
+    console.print(f"  [green]✓[/green] fact_historical_plays: {n:,} rows")
 
 
 # ── Name resolution back-fill ────────────────────────────────────────────────
@@ -1522,6 +1656,7 @@ LOADERS = [
     ("dim_games", load_dim_games),
     ("dim_games (historical)", load_historical_games),
     ("fact_game_scoring", load_fact_game_scoring),
+    ("fact_historical_plays", load_fact_historical_plays),
     ("fact_player_game_stats", load_fact_player_game_stats),
     ("fact_player_season_stats", load_fact_player_season_stats),
     ("fact_ngs_passing", load_fact_ngs_passing),

@@ -44,8 +44,21 @@ LARGE_TAGS = {"pbp", "stats_player", "stats_team"}
 # Local historical sources (Pro-Football-Reference scrapes, 1970+), not part
 # of the nflverse releases. Ingestion is a no-op if these paths aren't mounted.
 EXTERNAL_GAMELOGS_DIR = Path("/Volumes/16tbArchive/nfl-data/game-logs")
-EXTERNAL_SCORING_DIR = Path("/Volumes/16tbArchive/nfl-data/game_scoring")
-LOCAL_TAGS = ["historical_gamelogs", "historical_scoring", "nfl_elo"]
+# Scoring CSVs: the nfldata.org web copy (1970-2007), else the archive volume
+# (1970-1997 only). 1999+ seasons overlap nflverse play-by-play (fact_plays),
+# but are kept as the same summary shape for 1970-2007 consistency.
+EXTERNAL_SCORING_DIR = next(
+    (p for p in (
+        Path.home() / "web/nfldata.org/game-scoring",
+        Path("/Volumes/16tbArchive/nfl-data/game_scoring"),
+    ) if p.exists()),
+    Path("/Volumes/16tbArchive/nfl-data/game_scoring"),
+)
+SCORING_MAX_SEASON = 2007
+# Per-game play-by-play CSVs written by scripts/scrape-pfr-pbp.mjs (gitignored);
+# complete seasons are imported into committed bronze parquet.
+SCRAPED_PBP_DIR = DATA_DIR / "scraped" / "pfr_pbp"
+LOCAL_TAGS = ["historical_gamelogs", "historical_scoring", "historical_pbp", "nfl_elo"]
 
 # FiveThirtyEight game-by-game Elo/QB-Elo ratings, 1920-2022. The original
 # projects.fivethirtyeight.com host was decommissioned (ABC News/Disney shut
