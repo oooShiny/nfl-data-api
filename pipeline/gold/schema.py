@@ -240,6 +240,57 @@ ALTER TABLE fact_historical_plays ADD COLUMN IF NOT EXISTS forced_fumble_player_
 ALTER TABLE fact_historical_plays ADD COLUMN IF NOT EXISTS fumble_recovery_player_id VARCHAR;
 ALTER TABLE fact_historical_plays ADD COLUMN IF NOT EXISTS penalized_player_id VARCHAR;
 
+-- Season totals summed from fact_historical_plays (pipeline/gold/historical_stats.py),
+-- checked against PFR's official season pages by scripts/check_historical_stats.py.
+-- Columns match fact_player_season_stats / ref_team_stats where they overlap;
+-- team codes are dim_games' historical codes. /v1/stats/season and /v1/stats/team
+-- serve these for seasons before 1999.
+CREATE TABLE IF NOT EXISTS fact_historical_player_season_stats (
+    season                  SMALLINT,
+    season_type             VARCHAR,      -- REG or POST
+    player_id               VARCHAR,      -- gsis_id; NULL when the name didn't match a roster
+    player_name             VARCHAR,      -- as written in PFR's play-by-play
+    position                VARCHAR,      -- from fact_rosters
+    team                    VARCHAR,      -- one row per player and team
+    games                   SMALLINT,     -- games with a pass, rush or target
+    completions             INTEGER,
+    attempts                INTEGER,      -- incl. spikes and intentional grounding
+    passing_yards           INTEGER,      -- gross
+    passing_tds             INTEGER,
+    passing_interceptions   INTEGER,
+    sacks_suffered          INTEGER,
+    sack_yards_lost         INTEGER,
+    carries                 INTEGER,      -- incl. kneels and aborted snaps
+    rushing_yards           INTEGER,
+    rushing_tds             INTEGER,
+    targets                 INTEGER,
+    receptions              INTEGER,
+    receiving_yards         INTEGER,
+    receiving_tds           INTEGER,
+    source                  VARCHAR       -- 'pfr_pbp'
+);
+
+CREATE TABLE IF NOT EXISTS fact_historical_team_season_stats (
+    season                  SMALLINT,
+    season_type             VARCHAR,
+    team                    VARCHAR,
+    games                   SMALLINT,
+    plays                   INTEGER,      -- pass + run plays
+    attempts                INTEGER,
+    completions             INTEGER,
+    passing_yards           INTEGER,      -- gross
+    sack_yards_lost         INTEGER,
+    sacks_suffered          INTEGER,
+    net_passing_yards       INTEGER,      -- gross - sack yards (PFR's team "passing yards")
+    passing_tds             INTEGER,
+    passing_interceptions   INTEGER,
+    carries                 INTEGER,
+    rushing_yards           INTEGER,
+    rushing_tds             INTEGER,
+    source                  VARCHAR,
+    PRIMARY KEY (season, season_type, team)
+);
+
 
 -- ─────────────────────────────────────────────
 -- Fact tables
