@@ -1,7 +1,7 @@
 {
-  "run_at": "2026-11-24T18:59:03.346167+00:00",
+  "run_at": "2026-11-24T20:33:56.901517+00:00",
   "row_counts": {
-    "dim_players": 24871,
+    "dim_players": 24872,
     "dim_teams": 39,
     "dim_games": 13957,
     "fact_game_scoring": 107685,
@@ -20,10 +20,10 @@
     "ref_contracts": 53924,
     "ref_draft_picks": 12927,
     "ref_trades": 4975,
-    "name_resolution": 21075
+    "name_resolution": 21076
   },
   "resolution_methods": {
-    "fuzzy": 11776,
+    "fuzzy": 11777,
     "fuzzy_review": 1022,
     "id_anchor": 8277
   }
