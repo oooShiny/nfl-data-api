@@ -14,7 +14,10 @@ Checks, per season:
   - final: games whose last running score differs from dim_games
   - tds: touchdowns parsed vs touchdowns in fact_game_scoring
   - other: share of plays the description parser couldn't classify
-  - bad_side: yardline_side values that aren't one of the game's teams
+  - bad_side: yardline_side codes that no team uses that season (a missing
+    code mapping in the cleaner)
+  - typo_side: yardline_side is a real team but not one in the game (PFR typos,
+    e.g. 'CAR 30' in a DET-CHI game); reported, not a failure
   - poss: share of plays with an inferred posteam
   - pen: team-named penalties (false start, offside, ...) credited to the right side,
     an independent check on posteam
@@ -33,6 +36,10 @@ def main() -> int:
     con = duckdb.connect(str(DB), read_only=True)
     rows = con.execute("""
         WITH p AS (SELECT * FROM fact_historical_plays),
+        season_teams AS (
+            SELECT DISTINCT season, home_team AS team FROM fact_historical_plays
+            UNION SELECT DISTINCT season, away_team FROM fact_historical_plays
+        ),
         last AS (
             SELECT game_id, arg_max(home_score, play_seq) FILTER (WHERE home_score IS NOT NULL) AS h,
                             arg_max(away_score, play_seq) FILTER (WHERE away_score IS NOT NULL) AS a
@@ -45,7 +52,7 @@ def main() -> int:
                    count(*) FILTER (WHERE touchdown) AS tds,
                    count(*) FILTER (WHERE play_type = 'other') AS other,
                    count(*) FILTER (WHERE yardline_side IS NOT NULL
-                                      AND yardline_side NOT IN (home_team, away_team)) AS bad_side,
+                                      AND yardline_side NOT IN (home_team, away_team)) AS off_side,
                    avg((posteam IS NOT NULL)::INT) FILTER (WHERE play_type IS NOT NULL) AS poss
             FROM p GROUP BY 1
         ),
@@ -74,19 +81,22 @@ def main() -> int:
                s.tds,
                (SELECT count(*) FROM fact_game_scoring f WHERE f.season = s.season
                   AND f.scoring_type = 'touchdown') AS scoring_tds,
-               s.other, s.bad_side, s.poss,
+               s.other,
+               (SELECT count(*) FROM p WHERE p.season = s.season AND p.yardline_side IS NOT NULL
+                  AND p.yardline_side NOT IN (SELECT team FROM season_teams t WHERE t.season = s.season)) AS bad_side,
+               s.off_side, s.poss,
                (SELECT count(*) FILTER (WHERE ok) FROM pen WHERE pen.season = s.season) AS pen_ok,
                (SELECT count(*) FROM pen WHERE pen.season = s.season) AS pen_n
         FROM per_season s ORDER BY s.season DESC
     """).fetchall()
 
     failed = False
-    print(f"{'season':>6} {'plays':>7} {'games':>9} {'orphans':>7} {'final':>5} {'tds':>11} {'other':>6} {'bad_side':>8} {'poss':>6} {'pen':>8}")
-    for season, plays, games, sched, orphans, final_bad, tds, scoring_tds, other, bad_side, poss, pen_ok, pen_n in rows:
+    print(f"{'season':>6} {'plays':>7} {'games':>9} {'orphans':>7} {'final':>5} {'tds':>11} {'other':>6} {'bad_side':>8} {'typo_side':>9} {'poss':>6} {'pen':>8}")
+    for season, plays, games, sched, orphans, final_bad, tds, scoring_tds, other, bad_side, off_side, poss, pen_ok, pen_n in rows:
         bad = orphans or final_bad or bad_side
         failed |= bool(bad)
         print(f"{season:>6} {plays:>7,} {f'{games}/{sched}':>9} {orphans:>7} {final_bad:>5} "
-              f"{f'{tds}/{scoring_tds}':>11} {other / plays:>6.1%} {bad_side:>8} {(poss or 0):>6.1%} "
+              f"{f'{tds}/{scoring_tds}':>11} {other / plays:>6.1%} {bad_side:>8} {off_side - bad_side:>9} {(poss or 0):>6.1%} "
               f"{f'{pen_ok}/{pen_n}':>8}{'  <-- check' if bad else ''}")
     return 1 if failed else 0
 

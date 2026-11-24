@@ -187,4 +187,33 @@ def infer_possession(df: pl.DataFrame) -> pl.DataFrame:
         .when(pl.col("yardline_side") == pl.col("posteam")).then(100 - pl.col("yardline"))
         .otherwise(pl.col("yardline")).cast(pl.Int16).alias("yardline_100"),
     )
-    return df.drop("_ep_team")
+    return _number_drives(df.drop("_ep_team"))
+
+
+def _number_drives(df: pl.DataFrame) -> pl.DataFrame:
+    """Add drive, numbered from 1 within each game.
+
+    A drive starts on a kickoff, when posteam changes, and at the start of the
+    second half and of overtime. Kickoffs belong to the receiving team's drive,
+    and tries to the scoring team's, as in nflverse. Plays with no posteam
+    (timeouts, end of quarter) take the drive in progress.
+    """
+    half = pl.when(pl.col("quarter") <= 2).then(1).when(pl.col("quarter") <= 4).then(2).otherwise(pl.col("quarter"))
+    has = pl.col("posteam").is_not_null()
+    df = df.with_columns(_half=half)
+    # Previous assigned play's team and half, carried forward over unassigned plays.
+    df = df.with_columns(
+        _prev_team=pl.when(has).then(pl.col("posteam")).forward_fill().shift(1).over("game_id"),
+        _prev_half=pl.when(has).then(pl.col("_half")).forward_fill().shift(1).over("game_id"),
+    )
+    starts = has & (
+        pl.col("_prev_team").is_null()
+        | (pl.col("posteam") != pl.col("_prev_team"))
+        | (pl.col("_half") != pl.col("_prev_half"))
+        | (pl.col("play_type") == "kickoff")
+    )
+    df = df.with_columns(_start=starts.cast(pl.Int16))
+    drive = pl.col("_start").cum_sum().over("game_id")
+    df = df.with_columns(pl.when(drive > 0).then(drive).otherwise(None).cast(pl.Int16).alias("drive"))
+    df = df.with_columns(pl.col("drive").backward_fill().over("game_id"))
+    return df.drop("_half", "_prev_team", "_prev_half", "_start")

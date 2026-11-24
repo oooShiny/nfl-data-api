@@ -85,15 +85,21 @@ def test_load_fact_historical_plays_and_endpoint(tmp_path, monkeypatch):
 
     con = duckdb.connect()
     con.execute(SCHEMA_SQL)
+    con.execute("""INSERT INTO fact_rosters (season, team, player_name, player_id) VALUES
+        (1998, 'NE', 'Drew Bledsoe', '00-B'), (1998, 'NE', 'Ben Coates', '00-C')""")
     loader.load_fact_historical_plays(con)
 
     rows = con.execute("SELECT play_seq, play_type, passer, touchdown FROM fact_historical_plays ORDER BY 1").fetchall()
     assert rows == [(1, "kickoff", None, False), (2, "pass", "Drew Bledsoe", False), (3, "other", None, True)]
 
     out = list_historical_plays(None, season=1998, team="NE", play_type="pass", limit=50, offset=0, db=con,
-                                game_id=None, week=None, posteam=None)
+                                game_id=None, week=None, posteam=None, player_id=None)
     assert out.total == 1 and out.data[0]["receiver"] == "Ben Coates"
+    assert (out.data[0]["passer_id"], out.data[0]["receiver_id"]) == ("00-B", "00-C")
+    out = list_historical_plays(None, season=1998, player_id="00-C", limit=50, offset=0, db=con,
+                                game_id=None, week=None, team=None, play_type=None, posteam=None)
+    assert out.total == 1
     with pytest.raises(HTTPException):
         list_historical_plays(None, game_id=None, season=None, week=None, team=None, play_type=None,
-                              posteam=None, limit=50, offset=0, db=con)
+                              posteam=None, player_id=None, limit=50, offset=0, db=con)
     con.close()

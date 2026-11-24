@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from api.deps import _build_filter, get_db, list_table
 from api.models.responses import Game, PaginatedResponse
+from pipeline.historical_players import NAME_COLUMNS as HISTORICAL_NAME_COLUMNS
 
 router = APIRouter(tags=["games"])
 
@@ -80,6 +81,7 @@ def list_historical_plays(
     team: str | None = None,
     play_type: str | None = None,
     posteam: str | None = Query(default=None, description="Team with the ball (inferred)"),
+    player_id: str | None = Query(default=None, description="gsis_id in any player role (passer, rusher, tackler, ...)"),
     limit: int = Query(default=50, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     db: duckdb.DuckDBPyConnection = Depends(get_db),
@@ -87,8 +89,9 @@ def list_historical_plays(
     """Full play-by-play for pre-1999 games, scraped from Pro-Football-Reference.
 
     Descriptions plus parsed play_type, yards, touchdowns and player names
-    (free text), and the team with the ball (posteam, inferred from PFR's
-    expected points, scores and field position). No nflfastR EPA; see /v1/plays for 1999+.
+    with gsis_ids (*_id, matched through rosters), the team with the ball
+    (posteam, inferred from PFR's expected points, scores and field position)
+    and drive numbers. No nflfastR EPA; see /v1/plays for 1999+.
     """
     if game_id is None and season is None:
         raise HTTPException(status_code=422, detail="Either 'game_id' or 'season' is required.")
@@ -103,6 +106,10 @@ def list_historical_plays(
     if team is not None:
         where += f" {'AND' if where else 'WHERE'} (home_team = ? OR away_team = ?)"
         params += [team, team]
+    if player_id is not None:
+        id_cols = ", ".join(f"{c}_id" for c in HISTORICAL_NAME_COLUMNS)
+        where += f" {'AND' if where else 'WHERE'} ? IN ({id_cols})"
+        params.append(player_id)
 
     total = db.execute(f"SELECT COUNT(*) FROM fact_historical_plays {where}", params).fetchone()[0]
     rows = db.execute(
