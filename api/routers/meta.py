@@ -79,8 +79,15 @@ COVERAGE_ROWS: list[tuple[str, str, str]] = [
      "SELECT season, count(*) FROM fact_ftn_charting GROUP BY 1"),
     ("Players & Stats", "Game stat lines",
      "SELECT season, count(*) FROM fact_player_game_stats GROUP BY 1"),
+    # Before 1999: derived from the PFR play-by-play (fact_historical_*_season_stats).
     ("Players & Stats", "Season stat totals",
-     "SELECT season, count(*) FROM fact_player_season_stats WHERE season_type = 'REG' GROUP BY 1"),
+     """SELECT season, count(*) FROM (
+            SELECT season FROM fact_player_season_stats WHERE season_type = 'REG' UNION ALL
+            SELECT season FROM fact_historical_player_season_stats WHERE season_type = 'REG') GROUP BY 1"""),
+    ("Players & Stats", "Team season totals",
+     """SELECT season, count(*) FROM (
+            SELECT season FROM ref_team_stats WHERE season_type = 'REG' UNION ALL
+            SELECT season FROM fact_historical_team_season_stats WHERE season_type = 'REG') GROUP BY 1"""),
     ("Players & Stats", "Next Gen Stats",
      """SELECT season, count(*) FROM (SELECT season FROM fact_ngs_passing UNION ALL
         SELECT season FROM fact_ngs_receiving UNION ALL SELECT season FROM fact_ngs_rushing) GROUP BY 1"""),

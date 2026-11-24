@@ -12,12 +12,12 @@ $seasons = $meta['seasons'] ?? [];
 $seasonMin = $seasons ? min($seasons) : null;
 $seasonMax = $seasons ? max($seasons) : null;
 
-// Season range of the PFR historical play-by-play, which is back-filled one
-// season at a time, e.g. "1998" or "1990&ndash;1998".
-function historical_pbp_range(?array $coverage): string {
+// Season range of a coverage-map row, e.g. "1998" or "1990&ndash;1998". Used
+// for datasets that grow as the PFR play-by-play is back-filled.
+function coverage_range(?array $coverage, string $label): string {
     foreach ($coverage['groups'] ?? [] as $group) {
         foreach ($group['rows'] as $row) {
-            if ($row['label'] === 'Historical play-by-play (PFR)' && $row['seasons']) {
+            if ($row['label'] === $label && $row['seasons']) {
                 $years = array_map('intval', array_keys($row['seasons']));
                 $lo = min($years);
                 $hi = max($years);
@@ -344,7 +344,7 @@ require __DIR__ . '/includes/header.php';
                     </tr>
                     <tr>
                         <td>Historical play-by-play (Pro-Football-Reference)</td>
-                        <td><?= historical_pbp_range($coverage) ?></td>
+                        <td><?= coverage_range($coverage, 'Historical play-by-play (PFR)') ?></td>
                         <td class="text-right"><?= nf($rows['fact_historical_plays'] ?? null) ?></td>
                         <td>Every play of pre-1999 games from PFR box scores: down &amp; distance, field position, running score, description, and PFR expected points. Play type, yards, touchdowns and player names are parsed from the description, and names are matched to player IDs through team rosters. PFR has no possession column, so the team with the ball, and from it the drive, is inferred from PFR&rsquo;s expected points, scores and field position (about 99.6% of plays). Being filled in one season at a time, working back from 1998. <code>GET /v1/games/historical-plays</code>.</td>
                     </tr>
@@ -405,9 +405,15 @@ require __DIR__ . '/includes/header.php';
                     </tr>
                     <tr>
                         <td>Season stat totals</td>
-                        <td>1999&ndash;<?= htmlspecialchars((string) $seasonMax) ?></td>
-                        <td class="text-right"><?= nf($rows['fact_player_season_stats'] ?? null) ?></td>
-                        <td><code>GET /v1/stats/season</code> &mdash; REG, POST, and combined REG+POST rows per player-season.</td>
+                        <td><?= coverage_range($coverage, 'Season stat totals') ?></td>
+                        <td class="text-right"><?= nf(isset($rows['fact_player_season_stats']) ? $rows['fact_player_season_stats'] + ($rows['fact_historical_player_season_stats'] ?? 0) : null) ?></td>
+                        <td><code>GET /v1/stats/season</code> &mdash; REG, POST, and combined REG+POST rows per player-season, from nflverse for 1999 on. Before 1999, passing, rushing and receiving totals are added up from the PFR play-by-play above and checked against PFR&rsquo;s official season pages (most players match exactly; marked <code>source: pfr_pbp</code>). Extends back as the play-by-play does.</td>
+                    </tr>
+                    <tr>
+                        <td>Team season totals</td>
+                        <td><?= coverage_range($coverage, 'Team season totals') ?></td>
+                        <td class="text-right"><?= nf(isset($rows['ref_team_stats']) ? $rows['ref_team_stats'] + ($rows['fact_historical_team_season_stats'] ?? 0) : null) ?></td>
+                        <td><code>GET /v1/stats/team</code> &mdash; offense, defense and kicking totals per team-season from nflverse for 1999 on; before 1999, passing and rushing totals from the PFR play-by-play (<code>source: pfr_pbp</code>).</td>
                     </tr>
                     <tr>
                         <td>Next Gen Stats (passing/receiving/rushing)</td>

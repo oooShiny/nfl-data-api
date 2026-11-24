@@ -187,8 +187,8 @@ TABLES: dict[str, dict[str, str]] = {
     },
     "ref_team_stats": {
         "description": "Team season totals (offense and defense box-score aggregates).",
-        "coverage": "1999-present.",
-        "notes": "",
+        "coverage": "1999-present. Pre-1999 team totals are in fact_historical_team_season_stats.",
+        "notes": "One row per team, season and season_type: REG (every team), POST (playoff teams) and REG+POST (playoff teams only; for other teams REG is the whole season).",
     },
     "ref_team_elo": {
         "description": "FiveThirtyEight Elo and QB-adjusted Elo before/after every game, with win probabilities.",

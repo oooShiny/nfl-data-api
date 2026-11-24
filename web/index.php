@@ -65,7 +65,7 @@ require __DIR__ . '/includes/header.php';
 <section class="coverage-chips">
     <div class="chip">
         <div class="chip-value"><?= htmlspecialchars((string) $seasonCount) ?></div>
-        <div class="chip-label">Seasons 1999&ndash;Present</div>
+        <div class="chip-label">Seasons 1970&ndash;Present</div>
     </div>
     <div class="chip">
         <div class="chip-value">20K</div>
@@ -266,6 +266,8 @@ require __DIR__ . '/includes/header.php';
             ['/v1/games/head-to-head', 'Series history between two teams'],
             ['/v1/stats/season', 'League-wide season stat leaders'],
             ['/v1/plays', 'Play-by-play, 1999 to present'],
+            ['/v1/games/historical-plays', 'Pre-1999 play-by-play from Pro-Football-Reference'],
+            ['/v1/games/scoring', 'Every scoring play, 1970 to present'],
         ];
         foreach ($endpoints as $ep): ?>
         <div class="endpoint-row">
