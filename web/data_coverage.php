@@ -303,7 +303,7 @@ require __DIR__ . '/includes/header.php';
                         <td>Scoring-play summaries</td>
                         <td>1970&ndash;<?= htmlspecialchars((string) $seasonMax) ?></td>
                         <td class="text-right"><?= nf($rows['fact_game_scoring'] ?? null) ?></td>
-                        <td>One row per scoring play (TD/FG/safety etc.) &mdash; coarser than full play-by-play, and the only scoring detail before 1999. Pro-Football-Reference scoring summaries through part of 2007, then derived from nflverse play-by-play (a handful of games with inconsistent nflverse scores are left out). <code>GET /v1/games/scoring</code>.</td>
+                        <td>One row per scoring play (TD/FG/safety etc.) with a PFR-style description and structured fields: scoring type and method, yards, scorer, passer, and the try after a touchdown. Coarser than full play-by-play, and the only scoring detail before 1999. Pro-Football-Reference scoring summaries through part of 2007, then derived from nflverse play-by-play (a handful of games with inconsistent nflverse scores are left out). <code>GET /v1/games/scoring</code>.</td>
                     </tr>
                     <tr>
                         <td>Officiating crews</td>

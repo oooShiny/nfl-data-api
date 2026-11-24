@@ -48,15 +48,25 @@ def list_game_scoring(
     game_id: str | None = None,
     season: int | None = None,
     team: str | None = None,
+    scoring_type: str | None = Query(default=None, description="touchdown, field_goal, safety, defensive_two_point"),
+    scoring_method: str | None = Query(default=None, description="e.g. pass, rush, interception_return, punt_return"),
+    scorer_id: str | None = Query(default=None, description="gsis_id (2007+ rows derived from nflverse only)"),
     limit: int = Query(default=50, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
     db: duckdb.DuckDBPyConnection = Depends(get_db),
 ):
-    """Scoring-play summaries, 1970-present (PFR through part of 2007, then derived from nflverse play-by-play)."""
+    """Scoring-play summaries, 1970-present (PFR through part of 2007, then derived from nflverse play-by-play).
+
+    Every row has a PFR-style description plus structured fields (scoring type
+    and method, yards, scorer, passer, and the try after a touchdown).
+    """
     filters = [
         ("game_id = ?", game_id),
         ("season = ?", season),
         ("scoring_team = ?", team),
+        ("scoring_type = ?", scoring_type),
+        ("scoring_method = ?", scoring_method),
+        ("scorer_id = ?", scorer_id),
     ]
     return list_table(db, "fact_game_scoring", filters, "game_id, play_seq", limit, offset)
 

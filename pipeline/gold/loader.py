@@ -1,13 +1,22 @@
 """Load silver parquet files into the gold DuckDB database."""
 
 import json
+import re
 from pathlib import Path
 
 import duckdb
+import polars as pl
 from rich.console import Console
 
 from pipeline.config import SILVER_DIR, GOLD_DB
 from pipeline.gold.schema import SCHEMA_SQL
+from pipeline.scoring_text import (
+    FIELDS as SCORING_FIELDS,
+    NFLVERSE_FIELDS,
+    format_scoring,
+    nflverse_scoring_fields,
+    parse_pfr,
+)
 
 console = Console()
 
@@ -1461,47 +1470,102 @@ def load_historical_games(con: duckdb.DuckDBPyConnection) -> None:
     console.print(f"  [green]✓[/green] dim_games (historical 1970-1998): {n:,} rows")
 
 
+_SCORING_COLUMNS = [
+    "game_id", "season", "gameday", "play_seq", "quarter", "time", "scoring_team",
+    "home_score", "away_score", "description", "boxscore_url", "source",
+    "scoring_type", "scoring_method", "yards", "scorer", "scorer_id", "passer", "passer_id",
+    "try_type", "try_result", "try_player", "try_player_id", "try_passer", "try_passer_id",
+    "play_description",
+]
+
+# The PFR scoring summaries stop partway through 2007; from 2007 on, games
+# without them get scoring plays derived from nflverse play-by-play.
+SCORING_FROM_PBP_MIN_SEASON = 2007
+
+
+def _insert_scoring_frame(con: duckdb.DuckDBPyConnection, df: pl.DataFrame) -> None:
+    for col in _SCORING_COLUMNS:
+        if col not in df.columns:
+            df = df.with_columns(pl.lit(None).alias(col))
+    con.register("_scoring_df", df.select(_SCORING_COLUMNS))
+    cols = ", ".join(_SCORING_COLUMNS)
+    con.execute(f"INSERT INTO fact_game_scoring ({cols}) SELECT {cols} FROM _scoring_df")
+    con.unregister("_scoring_df")
+
+
 def load_fact_game_scoring(con: duckdb.DuckDBPyConnection) -> None:
     files = _silver_files("historical_scoring")
     if not files:
         console.print("  [yellow]fact_game_scoring: no silver files found[/yellow]")
         return
     glob = str(SILVER_DIR / "historical_scoring" / "*.parquet")
-    con.execute("DELETE FROM fact_game_scoring")
-    con.execute(f"""
-        INSERT INTO fact_game_scoring ({_SCORING_COLUMNS})
-        SELECT
-            game_id,
-            season::SMALLINT,
-            gameday,
-            play_seq::INTEGER,
-            quarter::SMALLINT,
-            time,
-            scoring_team,
-            home_score::SMALLINT,
-            away_score::SMALLINT,
-            description,
-            boxscore_url,
-            'pfr'
+    pfr = con.execute(f"""
+        SELECT game_id, season::SMALLINT AS season, gameday, play_seq::INTEGER AS play_seq,
+               quarter::SMALLINT AS quarter, time, scoring_team,
+               home_score::SMALLINT AS home_score, away_score::SMALLINT AS away_score,
+               description, boxscore_url
         FROM read_parquet('{glob}', union_by_name=true)
         WHERE game_id IS NOT NULL
-    """)
-    n_pfr = con.execute("SELECT COUNT(*) FROM fact_game_scoring").fetchone()[0]
+    """).pl()
+    parsed = [parse_pfr(d) for d in pfr["description"].to_list()]
+    fields = pl.DataFrame(parsed, schema={f: (pl.Int16 if f == "yards" else pl.Utf8) for f in SCORING_FIELDS})
+    # Normalized text: the formatted fields (identical to PFR's text for every
+    # recognised row, minus stray whitespace), else PFR's text as-is.
+    desc = [format_scoring(f) or (d.strip() if d else d) for f, d in zip(parsed, pfr["description"].to_list())]
+    pfr = pl.concat([pfr.drop("description"), fields.drop("safety_text")], how="horizontal").with_columns(
+        pl.Series("description", desc, dtype=pl.Utf8), pl.lit("pfr").alias("source"),
+    )
+
+    con.execute("DELETE FROM fact_game_scoring")
+    _insert_scoring_frame(con, pfr)
     derived = _insert_scoring_from_pbp(con)
     n = con.execute("SELECT COUNT(*) FROM fact_game_scoring").fetchone()[0]
     console.print(f"  [green]✓[/green] fact_game_scoring: {n:,} rows "
-                  f"({n_pfr:,} from PFR, {n - n_pfr:,} derived from nflverse play-by-play)")
+                  f"({pfr.height:,} from PFR, {n - pfr.height:,} derived from nflverse play-by-play)")
     if derived["skipped"]:
         console.print(f"    [dim]skipped {derived['skipped']} games whose derived scores "
                       f"don't check out (final score mismatch or merged events)[/dim]")
 
 
-_SCORING_COLUMNS = ("game_id, season, gameday, play_seq, quarter, time, scoring_team, "
-                    "home_score, away_score, description, boxscore_url, source")
+# nflverse play-by-play columns used to describe a scoring play and its try.
+_PBP_EVENT_COLUMNS = [
+    "play_type", "posteam", "defteam", "td_team", "td_player_id", "td_player_name",
+    "pass_touchdown", "rush_touchdown", "return_touchdown", "interception", "fumble",
+    "punt_blocked", "field_goal_result", "yards_gained", "return_yards", "fumble_recovery_1_yards",
+    "kick_distance", "passer_player_id", "passer_player_name", "receiver_player_id", "receiver_player_name",
+    "rusher_player_id", "rusher_player_name", "kicker_player_id", "kicker_player_name",
+    "safety_player_id", "safety_player_name", "extra_point_result", "two_point_conv_result",
+    "defensive_two_point_conv",
+]
 
-# The PFR scoring summaries stop partway through 2007; from 2007 on, games
-# without them get scoring plays derived from nflverse play-by-play.
-SCORING_FROM_PBP_MIN_SEASON = 2007
+
+def _scoring_player_names(con: duckdb.DuckDBPyConnection) -> dict:
+    """Player names for derived scoring rows, spelled the way PFR does.
+
+    PFR's roster name for that season (e.g. 'Michael Vick', 'Chad Ochocinco'),
+    keyed (gsis_id, season); then the player's latest PFR roster name; then
+    dim_players.display_name, keyed gsis_id.
+    """
+    names: dict = {}
+    for gsis_id, name in con.execute(
+        "SELECT gsis_id, display_name FROM dim_players WHERE gsis_id IS NOT NULL AND display_name IS NOT NULL"
+    ).fetchall():
+        names[gsis_id] = name
+    has_rosters = con.execute(
+        "SELECT count(*) FROM information_schema.tables WHERE table_name = 'ref_pfr_rosters'"
+    ).fetchone()[0]
+    if not has_rosters:
+        return names
+    rows = con.execute("""
+        SELECT p.gsis_id, r.season, any_value(r.player) AS player
+        FROM ref_pfr_rosters r JOIN dim_players p ON p.pfr_id = r.pfr_player_id
+        WHERE p.gsis_id IS NOT NULL AND r.player IS NOT NULL
+        GROUP BY 1, 2 ORDER BY 1, 2
+    """).fetchall()
+    for gsis_id, season, player in rows:
+        names[(gsis_id, season)] = player
+        names[gsis_id] = player  # rows are ordered by season, so this ends on the latest
+    return names
 
 
 def _insert_scoring_from_pbp(con: duckdb.DuckDBPyConnection) -> dict[str, int]:
@@ -1516,20 +1580,29 @@ def _insert_scoring_from_pbp(con: duckdb.DuckDBPyConnection) -> dict[str, int]:
     rows, so the running max is used. Games whose derived final score
     doesn't match dim_games, or that have an impossible event (a missed
     score update merging two scores), are left out rather than guessed at.
+
+    The structured columns come from the scoring play and its try play
+    (which, if it failed, didn't change the score and so is looked up as the
+    next attempt before the following score).
     """
     if not list((SILVER_DIR / "pbp").glob("play_by_play_*.parquet")):
         return {"skipped": 0}
     glob = str(SILVER_DIR / "pbp" / "play_by_play_*.parquet")
     con.execute(f"""
+        CREATE OR REPLACE TEMP TABLE _pbp AS
+        SELECT game_id, play_id, season, qtr, quarter_seconds_remaining, "desc", home_team, away_team,
+               touchdown, safety, extra_point_attempt, two_point_attempt, total_home_score, total_away_score,
+               {", ".join(_PBP_EVENT_COLUMNS)}
+        FROM read_parquet('{glob}', union_by_name=true)
+        WHERE season >= {SCORING_FROM_PBP_MIN_SEASON}
+          AND game_id NOT IN (SELECT game_id FROM fact_game_scoring)
+    """)
+    con.execute("""
         CREATE OR REPLACE TEMP TABLE _scoring_pbp AS
         WITH raw AS (
-            SELECT game_id, play_id, season, qtr, quarter_seconds_remaining, "desc",
-                   home_team, away_team, touchdown, extra_point_attempt, two_point_attempt,
-                   max(coalesce(total_home_score, 0)) OVER w1 AS h,
-                   max(coalesce(total_away_score, 0)) OVER w1 AS a
-            FROM read_parquet('{glob}', union_by_name=true)
-            WHERE season >= {SCORING_FROM_PBP_MIN_SEASON}
-              AND game_id NOT IN (SELECT game_id FROM fact_game_scoring)
+            SELECT *, max(coalesce(total_home_score, 0)) OVER w1 AS h,
+                      max(coalesce(total_away_score, 0)) OVER w1 AS a
+            FROM _pbp
             WINDOW w1 AS (PARTITION BY game_id ORDER BY play_id ROWS UNBOUNDED PRECEDING)
         ),
         chg AS (
@@ -1558,12 +1631,16 @@ def _insert_scoring_from_pbp(con: duckdb.DuckDBPyConnection) -> dict[str, int]:
         SELECT game_id,
                any_value(season)                                     AS season,
                grp                                                   AS play_seq,
+               min(play_id)                                          AS event_play_id,
+               max(play_id)                                          AS last_play_id,
+               max(CASE WHEN is_try THEN play_id END)                AS scored_try_play_id,
+               arg_min(pts, play_id)                                 AS event_pts,
+               sum(pts) - arg_min(pts, play_id)                      AS try_pts,
                arg_min(qtr, play_id)                                 AS quarter,
                arg_min(quarter_seconds_remaining, play_id)::INTEGER  AS secs,
                arg_min(team, play_id)                                AS scoring_team,
                arg_max(h, play_id)                                   AS home_score,
-               arg_max(a, play_id)                                   AS away_score,
-               regexp_replace(arg_min("desc", play_id), '^\\(\\s*[0-9:]*\\)\\s*', '') AS description
+               arg_max(a, play_id)                                   AS away_score
         FROM grouped
         WHERE grp > 0          -- a lone try before any event would be a data error
         GROUP BY game_id, grp
@@ -1584,23 +1661,77 @@ def _insert_scoring_from_pbp(con: duckdb.DuckDBPyConnection) -> dict[str, int]:
                   FROM _scoring_pbp)
               WHERE pts IN (4, 5) OR pts > 8)
     """)
-    con.execute(f"""
-        INSERT INTO fact_game_scoring ({_SCORING_COLUMNS})
-        SELECT s.game_id, s.season::SMALLINT, g.gameday, s.play_seq::INTEGER, s.quarter::SMALLINT,
-               s.secs::VARCHAR, s.scoring_team, s.home_score::SMALLINT, s.away_score::SMALLINT,
-               s.description,
+    ev_cols = ", ".join(f'e.{c} AS {c}' for c in ["desc", *_PBP_EVENT_COLUMNS])
+    try_cols = ", ".join(f't.{c} AS try_{c}' for c in [
+        "desc", "play_type", "extra_point_result", "two_point_conv_result", "kicker_player_id", "kicker_player_name",
+        "rusher_player_id", "rusher_player_name", "receiver_player_id", "receiver_player_name",
+        "passer_player_id", "passer_player_name"])
+    rows = con.execute(f"""
+        WITH s AS (
+            SELECT s.*,
+                   lead(s.event_play_id) OVER (PARTITION BY s.game_id ORDER BY s.play_seq) AS next_event_play_id,
+                   lag(s.last_play_id) OVER (PARTITION BY s.game_id ORDER BY s.play_seq) AS prev_last_play_id
+            FROM _scoring_pbp s JOIN _scoring_ok USING (game_id)
+        ),
+        s1 AS (
+            -- nflverse sometimes records the score change on a neighbouring
+            -- row (a timeout or end-of-quarter row, before or after the play):
+            -- use the nearest scoring play between the surrounding events.
+            SELECT s.* REPLACE (coalesce((
+                       SELECT arg_min(p.play_id, abs(p.play_id - s.event_play_id)) FROM _pbp p
+                       WHERE p.game_id = s.game_id
+                         AND p.play_id > coalesce(s.prev_last_play_id, -1)
+                         AND (s.next_event_play_id IS NULL OR p.play_id < s.next_event_play_id)
+                         AND (coalesce(p.touchdown, 0) = 1 OR p.field_goal_result = 'made'
+                              OR coalesce(p.safety, 0) = 1 OR coalesce(p.defensive_two_point_conv, 0) = 1)
+                   ), s.event_play_id) AS event_play_id)
+            FROM s
+        ),
+        s2 AS (
+            SELECT s1.*, coalesce(s1.scored_try_play_id, (
+                       SELECT min(p.play_id) FROM _pbp p
+                       WHERE p.game_id = s1.game_id AND p.play_id > s1.event_play_id
+                         AND (s1.next_event_play_id IS NULL OR p.play_id < s1.next_event_play_id)
+                         AND (coalesce(p.extra_point_attempt, 0) = 1 OR coalesce(p.two_point_attempt, 0) = 1))
+                   ) AS try_play_id
+            FROM s1
+        )
+        SELECT s2.game_id, s2.season::SMALLINT AS season, g.gameday, s2.play_seq::INTEGER AS play_seq,
+               e.qtr::SMALLINT AS quarter, e.quarter_seconds_remaining::INTEGER::VARCHAR AS time, s2.scoring_team,
+               s2.home_score::SMALLINT AS home_score, s2.away_score::SMALLINT AS away_score,
                CASE WHEN g.pfr IS NOT NULL
-                    THEN 'https://www.pro-football-reference.com/boxscores/' || g.pfr || '.htm' END,
-               'nflverse'
-        FROM _scoring_pbp s
-        JOIN _scoring_ok USING (game_id)
+                    THEN 'https://www.pro-football-reference.com/boxscores/' || g.pfr || '.htm' END AS boxscore_url,
+               s2.event_pts, s2.try_pts, {ev_cols}, {try_cols}
+        FROM s2
         JOIN dim_games g USING (game_id)
-    """)
+        JOIN _pbp e ON e.game_id = s2.game_id AND e.play_id = s2.event_play_id
+        LEFT JOIN _pbp t ON t.game_id = s2.game_id AND t.play_id = s2.try_play_id
+        ORDER BY s2.game_id, s2.play_seq
+    """).pl()
     skipped = con.execute(
         "SELECT count(DISTINCT game_id) FROM _scoring_pbp WHERE game_id NOT IN (SELECT game_id FROM _scoring_ok)"
     ).fetchone()[0]
-    con.execute("DROP TABLE _scoring_pbp")
-    con.execute("DROP TABLE _scoring_ok")
+    for t in ("_pbp", "_scoring_pbp", "_scoring_ok"):
+        con.execute(f"DROP TABLE {t}")
+    if rows.is_empty():
+        return {"skipped": skipped}
+
+    names = _scoring_player_names(con)
+    built = [nflverse_scoring_fields(r, names) for r in rows.iter_rows(named=True)]
+    fields = pl.DataFrame(built, schema={c: (pl.Int16 if c == "yards" else pl.Utf8) for c in NFLVERSE_FIELDS})
+    desc = [format_scoring(f) for f in built]
+    play_desc = [re.sub(r"^\(\s*[0-9:]*\)\s*", "", d) if d else d for d in rows["desc"].to_list()]
+    out = pl.concat([
+        rows.select("game_id", "season", "gameday", "play_seq", "quarter", "time", "scoring_team",
+                    "home_score", "away_score", "boxscore_url"),
+        fields,
+    ], how="horizontal").with_columns(
+        # Fall back to nflverse's own text when a play doesn't fit a PFR form.
+        pl.Series("description", [d or p for d, p in zip(desc, play_desc)], dtype=pl.Utf8),
+        pl.Series("play_description", play_desc, dtype=pl.Utf8),
+        pl.lit("nflverse").alias("source"),
+    )
+    _insert_scoring_frame(con, out)
     return {"skipped": skipped}
 
 
@@ -1655,7 +1786,6 @@ LOADERS = [
     ("dim_players", load_dim_players),
     ("dim_games", load_dim_games),
     ("dim_games (historical)", load_historical_games),
-    ("fact_game_scoring", load_fact_game_scoring),
     ("fact_historical_plays", load_fact_historical_plays),
     ("fact_player_game_stats", load_fact_player_game_stats),
     ("fact_player_season_stats", load_fact_player_season_stats),
@@ -1667,6 +1797,8 @@ LOADERS = [
     ("ref_pfr_adv_rec", load_ref_pfr_adv_rec),
     ("ref_pfr_adv_def", load_ref_pfr_adv_def),
     ("ref_pfr_rosters", load_ref_pfr_rosters),
+    # After ref_pfr_rosters and dim_players: derived rows use PFR-style names.
+    ("fact_game_scoring", load_fact_game_scoring),
     ("fact_ftn_charting", load_fact_ftn_charting),
     ("fact_pbp_participation", load_fact_pbp_participation),
     ("fact_rosters", load_fact_rosters),

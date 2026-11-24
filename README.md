@@ -22,7 +22,7 @@ GET /v1/players/{gsis_id}/stats?season=&week=&season_type=
 ```
 GET /v1/games?season=&week=&team=&game_type=                # 1970-present
 GET /v1/games/{game_id}
-GET /v1/games/scoring?game_id=&season=&team=               # scoring-play summaries, 1970-present
+GET /v1/games/scoring?game_id=&season=&team=&scoring_type=&scoring_method=&scorer_id=   # scoring-play summaries, 1970-present
 GET /v1/games/historical-plays?game_id=&season=&week=&team=&play_type=   # pre-1999 play-by-play (PFR); game_id or season required
 GET /v1/games/head-to-head?team1=&team2=&season=&game_type=&top_n=   # matchup history, records, biggest wins, top performances
 ```
@@ -128,7 +128,7 @@ Sourced from [nflverse-data](https://github.com/nflverse/nflverse-data) public r
 | `dim_players` | 25K | Player bio/draft info plus cross-reference IDs (gsis, esb, pfr, pff, sleeper, sportradar, yahoo, rotowire, fantasy_data) |
 | `dim_teams` | 36 | Team names, conference/division, colors, logos |
 | `dim_games` | 14K | Game results 1970-present; for 1999+ also schedule, stadium/weather, betting lines (spread/total/moneyline/odds), starting QBs, coaches, referee, rest days, cross-reference IDs |
-| `fact_game_scoring` | 106K | One row per scoring play (try folded into the TD), 1970-present: PFR scoring summaries through part of 2007 (`source = 'pfr'`), then derived from nflverse play-by-play (`source = 'nflverse'`). For 1999+, `fact_plays` is the richer source |
+| `fact_game_scoring` | 106K | One row per scoring play (try folded into the TD), 1970-present: PFR scoring summaries through part of 2007 (`source = 'pfr'`), then derived from nflverse play-by-play (`source = 'nflverse'`). Same PFR-style description for both, plus structured scoring type/method, yards, scorer, passer and try fields (gsis_ids on nflverse rows). For 1999+, `fact_plays` is the richer source |
 | `ref_team_elo` | 17.4K | FiveThirtyEight game-by-game Elo and QB-Elo ratings, win probabilities, starting QBs, 1920-2022 |
 
 ### Play-by-play
