@@ -34,7 +34,7 @@ Conventions
 - season_type is 'REG' or 'POST' (fact_player_season_stats also has 'REG+POST').
   dim_games.game_type is REG, WC, DIV, CON, or SB.
 - Play-by-play (fact_plays and children) covers 1999 onward. Games (dim_games) go back to
-  1970 with no missing seasons. Pre-1999 scoring plays are in fact_game_scoring, and
+  1970 with no missing seasons. Scoring-play summaries for every season are in fact_game_scoring, and
   pre-1999 full play-by-play (being back-filled season by season) is in fact_historical_plays.
 - EPA = expected points added, WPA = win probability added, CPOE = completion % over expected.
 """
@@ -92,9 +92,9 @@ TABLES: dict[str, dict[str, str]] = {
         "notes": "Join to fact_plays on (game_id, play_id).",
     },
     "fact_game_scoring": {
-        "description": "One row per scoring play (TD/FG/safety) from Pro-Football-Reference scoring summaries, with running score and description.",
-        "coverage": "1970-2007; 2007 stops partway through week 13. For 1999+ prefer fact_plays (full play-by-play with player IDs and EPA).",
-        "notes": "Team codes follow dim_games: historical codes before 1999, current franchise codes (LV, LAC, LA) from 1999.",
+        "description": "One row per scoring play (TD/FG/safety; a TD's PAT/2-pt try is folded into its row), with running score after the play and a description.",
+        "coverage": "1970-present. source='pfr' (PFR scoring summaries) through part of 2007; source='nflverse' (derived from nflverse play-by-play) after that. A handful of 2007+ games whose nflverse running score is inconsistent are omitted. For 1999+ prefer fact_plays for play-level detail.",
+        "notes": "time is seconds left in the quarter. Description style differs by source: PFR summaries ('X 10 yard pass from Y (Z kick)') vs nflverse play text. Team codes follow dim_games: historical codes before 1999, current franchise codes (LV, LAC, LA) from 1999.",
     },
     "fact_historical_plays": {
         "description": "Full play-by-play for pre-1999 games from Pro-Football-Reference: down, distance, field position, running score, description, PFR expected points, plus play_type/yards_gained/touchdown and player names parsed from the description.",

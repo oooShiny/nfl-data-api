@@ -99,22 +99,28 @@ CREATE TABLE IF NOT EXISTS dim_games (
     boxscore_url    VARCHAR
 );
 
--- PFR scoring-play summaries for 1970-2007 games in dim_games (2007 partial) —
--- coarser than fact_plays (one row per scoring event, not every play).
+-- One row per scoring event (a touchdown's PAT/2-pt try is folded into its
+-- row), coarser than fact_plays. source = 'pfr': PFR scoring summaries,
+-- 1970 through part of 2007. source = 'nflverse': derived from nflverse
+-- play-by-play for the remaining 2007+ games (description is nflverse's
+-- play text, not PFR's summary style).
 CREATE TABLE IF NOT EXISTS fact_game_scoring (
     game_id         VARCHAR,
     season          SMALLINT,
     gameday         DATE,
     play_seq        INTEGER,
     quarter         SMALLINT,
-    time            VARCHAR,
+    time            VARCHAR,              -- seconds left in the quarter
     scoring_team    VARCHAR,
     home_score      SMALLINT,             -- running score after this play
     away_score      SMALLINT,
     description     VARCHAR,
     boxscore_url    VARCHAR,
+    source          VARCHAR,              -- 'pfr' or 'nflverse'
     PRIMARY KEY (game_id, play_seq)
 );
+-- For databases created before the source column existed.
+ALTER TABLE fact_game_scoring ADD COLUMN IF NOT EXISTS source VARCHAR;
 
 -- Full play-by-play for pre-1999 games, scraped from Pro-Football-Reference
 -- boxscores (scripts/scrape-pfr-pbp.mjs). Not the same shape as fact_plays:
