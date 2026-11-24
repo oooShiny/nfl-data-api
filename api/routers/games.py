@@ -79,6 +79,7 @@ def list_historical_plays(
     week: int | None = None,
     team: str | None = None,
     play_type: str | None = None,
+    posteam: str | None = Query(default=None, description="Team with the ball (inferred)"),
     limit: int = Query(default=50, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     db: duckdb.DuckDBPyConnection = Depends(get_db),
@@ -86,7 +87,8 @@ def list_historical_plays(
     """Full play-by-play for pre-1999 games, scraped from Pro-Football-Reference.
 
     Descriptions plus parsed play_type, yards, touchdowns and player names
-    (free text). No possession team or nflfastR EPA; see /v1/plays for 1999+.
+    (free text), and the team with the ball (posteam, inferred from PFR's
+    expected points, scores and field position). No nflfastR EPA; see /v1/plays for 1999+.
     """
     if game_id is None and season is None:
         raise HTTPException(status_code=422, detail="Either 'game_id' or 'season' is required.")
@@ -95,6 +97,7 @@ def list_historical_plays(
         ("season = ?", season),
         ("week = ?", week),
         ("play_type = ?", play_type),
+        ("posteam = ?", posteam),
     ]
     where, params = _build_filter(filters)
     if team is not None:

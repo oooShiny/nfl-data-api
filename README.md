@@ -139,7 +139,7 @@ Sourced from [nflverse-data](https://github.com/nflverse/nflverse-data) public r
 | `fact_pass_plays` | 524K | Pass-specific detail: passer/receiver, air yards, YAC, completion, CPOE |
 | `fact_rush_plays` | 385K | Rush-specific detail: rusher, run location/gap, TDs |
 | `fact_kick_plays` | 314K | Punts, field goals, extra points, kickoffs, returns |
-| `fact_historical_plays` | 42.7K | Pre-1999 play-by-play from Pro-Football-Reference (1998 so far, back-filled one season at a time): down/distance, field position, score, description, PFR expected points, and play type/yards/TD/player names parsed from the description |
+| `fact_historical_plays` | 42.7K | Pre-1999 play-by-play from Pro-Football-Reference (1998 so far, back-filled one season at a time): down/distance, field position, score, description, PFR expected points, play type/yards/TD/player names parsed from the description, and the team with the ball (inferred) |
 | `fact_pbp_participation` | 486K | Personnel groupings, formations, pass rush/coverage detail per play (2016+) |
 | `fact_ftn_charting` | 185K | Play-design charting — motion, play-action, RPO, blitz, pressure, drops (2022+) |
 

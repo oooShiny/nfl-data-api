@@ -156,7 +156,9 @@ ALTER TABLE fact_game_scoring ADD COLUMN IF NOT EXISTS play_description VARCHAR;
 -- boxscores (scripts/scrape-pfr-pbp.mjs). Not the same shape as fact_plays:
 -- PFR gives only prose descriptions, so play_type, yards_gained, touchdown and
 -- the player-role columns are parsed from `description` (free-text names, not
--- gsis_ids), and there is no possession team. exp_pts_* are PFR's own
+-- gsis_ids). PFR has no possession column: posteam/defteam are inferred
+-- from PFR's expected-points values, scores and field position
+-- (pipeline/silver/pfr_possession.py). exp_pts_* are PFR's own
 -- expected-points values, not nflfastR's.
 CREATE TABLE IF NOT EXISTS fact_historical_plays (
     game_id                 VARCHAR,
@@ -166,12 +168,16 @@ CREATE TABLE IF NOT EXISTS fact_historical_plays (
     game_type               VARCHAR,
     home_team               VARCHAR,      -- dim_games codes (historical: OAK, STL, ...)
     away_team               VARCHAR,
+    posteam                 VARCHAR,      -- inferred: offense; kicking team on punts/FG/XP,
+                                          -- receiving team on kickoffs (as in fact_plays)
+    defteam                 VARCHAR,
     quarter                 SMALLINT,     -- 5 = overtime
     clock                   VARCHAR,      -- 'MM:SS' left in quarter; often NULL in source
     down                    SMALLINT,
     ydstogo                 SMALLINT,
     yardline_side           VARCHAR,      -- whose side of the field the ball is on
     yardline                SMALLINT,     -- 1-50 from that side's goal line
+    yardline_100            SMALLINT,     -- yards from the opponent's goal line (posteam's view)
     location_raw            VARCHAR,      -- PFR's original, e.g. 'NWE 35'
     away_score              SMALLINT,     -- running score after the play
     home_score              SMALLINT,
@@ -199,6 +205,11 @@ CREATE TABLE IF NOT EXISTS fact_historical_plays (
     boxscore_url            VARCHAR,
     PRIMARY KEY (game_id, play_seq)
 );
+-- For databases created before possession was inferred.
+ALTER TABLE fact_historical_plays ADD COLUMN IF NOT EXISTS posteam VARCHAR;
+ALTER TABLE fact_historical_plays ADD COLUMN IF NOT EXISTS defteam VARCHAR;
+ALTER TABLE fact_historical_plays ADD COLUMN IF NOT EXISTS yardline_100 SMALLINT;
+
 
 -- ─────────────────────────────────────────────
 -- Fact tables

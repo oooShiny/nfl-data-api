@@ -346,7 +346,7 @@ require __DIR__ . '/includes/header.php';
                         <td>Historical play-by-play (Pro-Football-Reference)</td>
                         <td><?= historical_pbp_range($coverage) ?></td>
                         <td class="text-right"><?= nf($rows['fact_historical_plays'] ?? null) ?></td>
-                        <td>Every play of pre-1999 games from PFR box scores: down &amp; distance, field position, running score, description, and PFR expected points. Play type, yards, touchdowns and player names are parsed from the description (names are free text, not player IDs), and there&rsquo;s no possession team. Being filled in one season at a time, working back from 1998. <code>GET /v1/games/historical-plays</code>.</td>
+                        <td>Every play of pre-1999 games from PFR box scores: down &amp; distance, field position, running score, description, and PFR expected points. Play type, yards, touchdowns and player names are parsed from the description (names are free text, not player IDs). PFR has no possession column, so the team with the ball is inferred from PFR&rsquo;s expected points, scores and field position (about 99.6% of plays). Being filled in one season at a time, working back from 1998. <code>GET /v1/games/historical-plays</code>.</td>
                     </tr>
                     <tr>
                         <td>Pass / rush / kick play splits</td>

@@ -91,9 +91,9 @@ def test_load_fact_historical_plays_and_endpoint(tmp_path, monkeypatch):
     assert rows == [(1, "kickoff", None, False), (2, "pass", "Drew Bledsoe", False), (3, "other", None, True)]
 
     out = list_historical_plays(None, season=1998, team="NE", play_type="pass", limit=50, offset=0, db=con,
-                                game_id=None, week=None)
+                                game_id=None, week=None, posteam=None)
     assert out.total == 1 and out.data[0]["receiver"] == "Ben Coates"
     with pytest.raises(HTTPException):
         list_historical_plays(None, game_id=None, season=None, week=None, team=None, play_type=None,
-                              limit=50, offset=0, db=con)
+                              posteam=None, limit=50, offset=0, db=con)
     con.close()
