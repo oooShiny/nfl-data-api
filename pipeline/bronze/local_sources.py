@@ -82,7 +82,10 @@ def import_scoring(force: bool = False) -> int:
         dst = dst_dir / f"{season}.parquet"
         if not force and dst.exists():
             continue
-        df = pl.concat([_read_csv(f) for f in sorted(files)], how="vertical_relaxed")
+        # Some source files are empty (a header of "" and no rows), e.g. the
+        # 2007 scrape stopped partway through week 13. Skip them.
+        frames = [df for df in (_read_csv(f) for f in sorted(files)) if df.width > 1]
+        df = pl.concat(frames, how="vertical_relaxed")
         df.write_parquet(dst, compression="zstd")
         written += 1
 

@@ -99,7 +99,7 @@ CREATE TABLE IF NOT EXISTS dim_games (
     boxscore_url    VARCHAR
 );
 
--- Scoring-play summaries for the historical (1970-1998) games in dim_games —
+-- PFR scoring-play summaries for 1970-2007 games in dim_games (2007 partial) —
 -- coarser than fact_plays (one row per scoring event, not every play).
 CREATE TABLE IF NOT EXISTS fact_game_scoring (
     game_id         VARCHAR,

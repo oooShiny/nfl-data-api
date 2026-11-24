@@ -301,9 +301,9 @@ require __DIR__ . '/includes/header.php';
                     </tr>
                     <tr>
                         <td>Scoring-play summaries</td>
-                        <td>1970&ndash;1998</td>
+                        <td>1970&ndash;2007</td>
                         <td class="text-right"><?= nf($rows['fact_game_scoring'] ?? null) ?></td>
-                        <td>One row per scoring play (TD/FG/safety etc.) for pre-1999 games &mdash; coarser than full play-by-play. <code>GET /v1/games/scoring</code>.</td>
+                        <td>One row per scoring play (TD/FG/safety etc.) from Pro-Football-Reference &mdash; coarser than full play-by-play, and the only scoring detail before 1999. 2007 stops partway through week 13 (the source files end there). <code>GET /v1/games/scoring</code>.</td>
                     </tr>
                     <tr>
                         <td>Officiating crews</td>

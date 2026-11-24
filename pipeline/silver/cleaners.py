@@ -247,7 +247,12 @@ def _clean_historical_gamelogs(df: pl.DataFrame) -> pl.DataFrame:
 
 def _clean_historical_scoring(df: pl.DataFrame) -> pl.DataFrame:
     season = int(df["season"][0])
-    games_path = SILVER_DIR / "historical_gamelogs" / f"{season}.parquet"
+    # Games come from the PFR gamelogs through 1998, and from nflverse
+    # schedules after that (matched on PFR's boxscore id, e.g. 200301040gnb).
+    if season <= 1998:
+        games_path = SILVER_DIR / "historical_gamelogs" / f"{season}.parquet"
+    else:
+        games_path = SILVER_DIR / "schedules" / "games.parquet"
     if not games_path.exists():
         return df.clear().select([
             pl.lit(None, dtype=pl.Utf8).alias("game_id"),
@@ -268,7 +273,12 @@ def _clean_historical_scoring(df: pl.DataFrame) -> pl.DataFrame:
 
     df = df.with_columns(pl.col("event_date").str.to_date(strict=False).alias("gameday"))
 
-    games = pl.read_parquet(games_path).select([
+    games = pl.read_parquet(games_path)
+    if season > 1998:
+        games = games.filter((pl.col("season") == season) & pl.col("pfr").is_not_null()).with_columns(
+            ("https://www.pro-football-reference.com/boxscores/" + pl.col("pfr") + ".htm").alias("boxscore_url")
+        )
+    games = games.select([
         "game_id", "home_team", "away_team", "home_score", "away_score",
         pl.col("boxscore_url").alias("boxscore_stats_link"),
     ])

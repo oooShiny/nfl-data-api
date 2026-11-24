@@ -92,9 +92,9 @@ TABLES: dict[str, dict[str, str]] = {
         "notes": "Join to fact_plays on (game_id, play_id).",
     },
     "fact_game_scoring": {
-        "description": "One row per scoring play for older games (TD/FG/safety), with running score and description.",
-        "coverage": "1970-1998. Use fact_plays for 1999+.",
-        "notes": "",
+        "description": "One row per scoring play (TD/FG/safety) from Pro-Football-Reference scoring summaries, with running score and description.",
+        "coverage": "1970-2007; 2007 stops partway through week 13. For 1999+ prefer fact_plays (full play-by-play with player IDs and EPA).",
+        "notes": "Team codes follow dim_games: historical codes before 1999, current franchise codes (LV, LAC, LA) from 1999.",
     },
     "fact_historical_plays": {
         "description": "Full play-by-play for pre-1999 games from Pro-Football-Reference: down, distance, field position, running score, description, PFR expected points, plus play_type/yards_gained/touchdown and player names parsed from the description.",
