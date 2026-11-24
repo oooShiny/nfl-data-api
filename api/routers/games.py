@@ -52,7 +52,7 @@ def list_game_scoring(
     offset: int = Query(default=0, ge=0),
     db: duckdb.DuckDBPyConnection = Depends(get_db),
 ):
-    """Scoring-play summaries for historical games (1970-1997)."""
+    """Scoring-play summaries for historical games (1970-1998)."""
     filters = [
         ("game_id = ?", game_id),
         ("season = ?", season),

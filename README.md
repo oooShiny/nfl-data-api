@@ -22,7 +22,7 @@ GET /v1/players/{gsis_id}/stats?season=&week=&season_type=
 ```
 GET /v1/games?season=&week=&team=&game_type=                # 1970-present
 GET /v1/games/{game_id}
-GET /v1/games/scoring?game_id=&season=&team=               # scoring-play summaries, 1970-1997
+GET /v1/games/scoring?game_id=&season=&team=               # scoring-play summaries, 1970-1998
 GET /v1/games/head-to-head?team1=&team2=&season=&game_type=&top_n=   # matchup history, records, biggest wins, top performances
 ```
 
@@ -112,7 +112,7 @@ with `web/data_coverage.php`.
 
 Sourced from [nflverse-data](https://github.com/nflverse/nflverse-data) public releases.
 
-**At a glance:** every regular-season and playoff game from **1999 to the current season** (~7,500 games), every play (**1.28M**) with EPA/WPA, weekly stats for **25K players**, plus rosters, depth charts, injuries, snap counts, draft history, combine results, contracts, and trades going back to 1999 (combine/contracts/trades coverage varies by source). Game results extend back to **1970** (pre-1999 via Pro-Football-Reference), with scoring-play detail for 1970-1997.
+**At a glance:** every regular-season and playoff game from **1999 to the current season** (~7,500 games), every play (**1.28M**) with EPA/WPA, weekly stats for **25K players**, plus rosters, depth charts, injuries, snap counts, draft history, combine results, contracts, and trades going back to 1999 (combine/contracts/trades coverage varies by source). Game results extend back to **1970** (pre-1999 via Pro-Football-Reference), with scoring-play detail for 1970-1998.
 
 | Layer | Contents |
 |---|---|
@@ -127,7 +127,7 @@ Sourced from [nflverse-data](https://github.com/nflverse/nflverse-data) public r
 | `dim_players` | 25K | Player bio/draft info plus cross-reference IDs (gsis, esb, pfr, pff, sleeper, sportradar, yahoo, rotowire, fantasy_data) |
 | `dim_teams` | 36 | Team names, conference/division, colors, logos |
 | `dim_games` | 14K | Game results 1970-present; for 1999+ also schedule, stadium/weather, betting lines (spread/total/moneyline/odds), starting QBs, coaches, referee, rest days, cross-reference IDs |
-| `fact_game_scoring` | 44.7K | Scoring-play summaries for historical games, 1970-1997 |
+| `fact_game_scoring` | 46.7K | Scoring-play summaries for historical games, 1970-1998 |
 | `ref_team_elo` | 17.4K | FiveThirtyEight game-by-game Elo and QB-Elo ratings, win probabilities, starting QBs, 1920-2022 |
 
 ### Play-by-play

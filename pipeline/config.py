@@ -44,7 +44,16 @@ LARGE_TAGS = {"pbp", "stats_player", "stats_team"}
 # Local historical sources (Pro-Football-Reference scrapes, 1970+), not part
 # of the nflverse releases. Ingestion is a no-op if these paths aren't mounted.
 EXTERNAL_GAMELOGS_DIR = Path("/Volumes/16tbArchive/nfl-data/game-logs")
-EXTERNAL_SCORING_DIR = Path("/Volumes/16tbArchive/nfl-data/game_scoring")
+# Scoring CSVs: the archive volume, else the nfldata.org web copy (same files,
+# plus 1998-2007). Seasons covered by nflverse play-by-play are not imported.
+EXTERNAL_SCORING_DIR = next(
+    (p for p in (
+        Path("/Volumes/16tbArchive/nfl-data/game_scoring"),
+        Path.home() / "web/nfldata.org/game-scoring",
+    ) if p.exists()),
+    Path("/Volumes/16tbArchive/nfl-data/game_scoring"),
+)
+SCORING_MAX_SEASON = 1998
 LOCAL_TAGS = ["historical_gamelogs", "historical_scoring", "nfl_elo"]
 
 # FiveThirtyEight game-by-game Elo/QB-Elo ratings, 1920-2022. The original

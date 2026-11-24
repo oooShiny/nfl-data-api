@@ -92,7 +92,7 @@ TABLES: dict[str, dict[str, str]] = {
     },
     "fact_game_scoring": {
         "description": "One row per scoring play for older games (TD/FG/safety), with running score and description.",
-        "coverage": "1970-1997. Use fact_plays for 1999+.",
+        "coverage": "1970-1998. Use fact_plays for 1999+.",
         "notes": "",
     },
     # --- player stats ---

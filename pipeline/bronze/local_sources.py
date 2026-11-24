@@ -12,7 +12,13 @@ import httpx
 import polars as pl
 from rich.console import Console
 
-from pipeline.config import BRONZE_DIR, EXTERNAL_GAMELOGS_DIR, EXTERNAL_SCORING_DIR, NFL_ELO_URL
+from pipeline.config import (
+    BRONZE_DIR,
+    EXTERNAL_GAMELOGS_DIR,
+    EXTERNAL_SCORING_DIR,
+    NFL_ELO_URL,
+    SCORING_MAX_SEASON,
+)
 
 console = Console()
 
@@ -66,7 +72,7 @@ def import_scoring(force: bool = False) -> int:
         if src.name.startswith("._"):
             continue
         m = _SCORING_FILENAME_RE.match(src.name)
-        if not m:
+        if not m or int(m.group(1)) > SCORING_MAX_SEASON:
             continue
         by_season.setdefault(m.group(1), []).append(src)
 
