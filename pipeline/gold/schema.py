@@ -102,8 +102,7 @@ CREATE TABLE IF NOT EXISTS dim_games (
 -- One row per scoring event (a touchdown's PAT/2-pt try is folded into its
 -- row), coarser than fact_plays. source = 'pfr': PFR scoring summaries,
 -- 1970 through part of 2007. source = 'nflverse': derived from nflverse
--- play-by-play for the remaining 2007+ games (description is nflverse's
--- play text, not PFR's summary style).
+-- play-by-play for the remaining 2007+ games.
 CREATE TABLE IF NOT EXISTS fact_game_scoring (
     game_id         VARCHAR,
     season          SMALLINT,
@@ -117,10 +116,41 @@ CREATE TABLE IF NOT EXISTS fact_game_scoring (
     description     VARCHAR,
     boxscore_url    VARCHAR,
     source          VARCHAR,              -- 'pfr' or 'nflverse'
+    -- Structured fields: parsed from PFR's text, or built from nflverse
+    -- play-by-play (description is then generated in PFR's style).
+    scoring_type    VARCHAR,              -- touchdown, field_goal, safety, defensive_two_point
+    scoring_method  VARCHAR,              -- pass, rush, interception_return, punt_return,
+                                          -- defensive_fumble_recovery, field_goal, safety, ...
+    yards           SMALLINT,             -- TD play / return yards, FG distance
+    scorer          VARCHAR,              -- TD scorer, FG kicker (safety: credited player, nflverse only)
+    scorer_id       VARCHAR,              -- gsis_id (nflverse rows only), likewise below
+    passer          VARCHAR,              -- passing TDs
+    passer_id       VARCHAR,
+    try_type        VARCHAR,              -- kick, pass, run (NULL: no try recorded)
+    try_result      VARCHAR,              -- good, failed
+    try_player      VARCHAR,              -- kicker, or 2-pt runner/receiver
+    try_player_id   VARCHAR,
+    try_passer      VARCHAR,
+    try_passer_id   VARCHAR,
+    play_description VARCHAR,             -- nflverse's original play text (nflverse rows only)
     PRIMARY KEY (game_id, play_seq)
 );
--- For databases created before the source column existed.
+-- For databases created before these columns existed.
 ALTER TABLE fact_game_scoring ADD COLUMN IF NOT EXISTS source VARCHAR;
+ALTER TABLE fact_game_scoring ADD COLUMN IF NOT EXISTS scoring_type VARCHAR;
+ALTER TABLE fact_game_scoring ADD COLUMN IF NOT EXISTS scoring_method VARCHAR;
+ALTER TABLE fact_game_scoring ADD COLUMN IF NOT EXISTS yards SMALLINT;
+ALTER TABLE fact_game_scoring ADD COLUMN IF NOT EXISTS scorer VARCHAR;
+ALTER TABLE fact_game_scoring ADD COLUMN IF NOT EXISTS scorer_id VARCHAR;
+ALTER TABLE fact_game_scoring ADD COLUMN IF NOT EXISTS passer VARCHAR;
+ALTER TABLE fact_game_scoring ADD COLUMN IF NOT EXISTS passer_id VARCHAR;
+ALTER TABLE fact_game_scoring ADD COLUMN IF NOT EXISTS try_type VARCHAR;
+ALTER TABLE fact_game_scoring ADD COLUMN IF NOT EXISTS try_result VARCHAR;
+ALTER TABLE fact_game_scoring ADD COLUMN IF NOT EXISTS try_player VARCHAR;
+ALTER TABLE fact_game_scoring ADD COLUMN IF NOT EXISTS try_player_id VARCHAR;
+ALTER TABLE fact_game_scoring ADD COLUMN IF NOT EXISTS try_passer VARCHAR;
+ALTER TABLE fact_game_scoring ADD COLUMN IF NOT EXISTS try_passer_id VARCHAR;
+ALTER TABLE fact_game_scoring ADD COLUMN IF NOT EXISTS play_description VARCHAR;
 
 -- Full play-by-play for pre-1999 games, scraped from Pro-Football-Reference
 -- boxscores (scripts/scrape-pfr-pbp.mjs). Not the same shape as fact_plays:
