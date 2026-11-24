@@ -25,7 +25,8 @@ Identifiers
   - dim_games (1999+), play-by-play and stat tables use today's code for each franchise in
     every season: LV (Raiders, even in Oakland years), LAC (Chargers, even in San Diego years),
     LA (Rams, even in St. Louis years), JAX, WSH.
-  - dim_games before 1999 uses historical codes (OAK, RAI, SD, STL, PHX, SLC, LA, ...).
+  - dim_games before 1999 uses historical codes (OAK, RAI, SD, STL, PHX, SLC, LA, ...), and so
+    do fact_rosters, fact_historical_plays and fact_game_scoring for those seasons.
   - ref_pfr_rosters uses fixed old codes in every season: OAK, SD, STL, JAC, WAS.
   - dim_teams lists both current and legacy codes (and LAR, WAS).
 
@@ -131,7 +132,7 @@ TABLES: dict[str, dict[str, str]] = {
     "fact_rosters": {
         "description": "Season rosters: player, team, position, jersey, bio, draft info.",
         "coverage": "1920-present; older players may lack a gsis_id.",
-        "notes": "",
+        "notes": "team uses today's franchise codes from 1999 (LV, LAC, LA, WSH) and dim_games' historical codes before 1999 (OAK/RAI, SD, SLC/PHX for the Cardinals, LA/STL for the Rams, HOU for the Oilers), so old rosters join dim_games and fact_historical_plays on team. A player traded mid-season has a row for each team.",
     },
     "fact_weekly_rosters": {
         "description": "Roster status by team and week (active, inactive, reserve, ...).",

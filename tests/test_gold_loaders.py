@@ -90,3 +90,16 @@ def test_player_game_stats_from_stats_player(con):
     # Defender with no offensive production is filtered out; renamed columns map back;
     # dakota comes only from legacy files (none for 2025).
     assert rows == [("00-1", "PHI", "2025_01_DAL_PHI", 250, 1, 2.0, 12, 5, None)]
+
+
+def test_roster_team_codes_follow_dim_games_before_1999():
+    import polars as pl
+
+    from pipeline.silver.cleaners import _clean_rosters
+
+    df = pl.DataFrame({
+        "season": [1975, 1975, 1985, 1990, 1970, 1998, 1998, 2005, 2005],
+        "team":   ["STL", "LA", "RAM", "PHO", "BOS", "STL", "OAK", "STL", "OAK"],
+    })
+    # STL is the Cardinals through 1987 and the Rams from 1995; 1999+ uses today's codes.
+    assert _clean_rosters(df)["team"].to_list() == ["SLC", "LA", "LA", "PHX", "NE", "STL", "OAK", "LA", "LV"]
