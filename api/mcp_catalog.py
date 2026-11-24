@@ -102,6 +102,16 @@ TABLES: dict[str, dict[str, str]] = {
         "coverage": "Pre-1999, back-filled one season at a time from 1998 backward; check SELECT DISTINCT season. Use fact_plays for 1999+.",
         "notes": "Key is (game_id, play_seq). Player columns (passer, rusher, receiver, ...) are names parsed from the description; each has a matching *_id gsis_id (passer_id, rusher_id, ...) matched by name against fact_rosters for the two teams that season, NULL when no single player matches (about 99.7% of names match). posteam/defteam are inferred (PFR has no possession column) from PFR's expected points, scores and field position; about 99.6% of plays are assigned, with posteam = receiving team on kickoffs and kicking team on punts/FG/XP, as in fact_plays. drive numbers possessions from 1 within each game (new drive on each kickoff, change of posteam, and at the half and overtime). yardline_100 is distance to the opponent's goal line. quarter 5 = overtime. clock is often NULL in the source. Team codes match dim_games historical codes.",
     },
+    "fact_historical_player_season_stats": {
+        "description": "Pre-1999 player season totals (passing, rushing, receiving) summed from fact_historical_plays; source = 'pfr_pbp'.",
+        "coverage": "The seasons in fact_historical_plays (being back-filled from 1998); REG and POST. Use fact_player_season_stats for 1999+.",
+        "notes": "Derived, not official: checked against PFR's season pages (scripts/check_historical_stats.py), where 93-100% of players match exactly on yards, TDs, completions, receptions and interceptions and attempts/carries are almost all within 1-2. One row per player and team (team = historical dim_games code). Column names match fact_player_season_stats (passing_interceptions, sacks_suffered, sack_yards_lost). player_id is NULL when the name didn't match a roster. Attempts include spikes and accepted intentional grounding; carries include kneels and aborted snaps; passing_yards are gross. No fumbles, first downs, defense or kicking. /v1/stats/season serves this for seasons before 1999.",
+    },
+    "fact_historical_team_season_stats": {
+        "description": "Pre-1999 team season offense totals (passing, rushing, sacks) summed from fact_historical_plays; source = 'pfr_pbp'.",
+        "coverage": "The seasons in fact_historical_plays; REG and POST. Use ref_team_stats for 1999+.",
+        "notes": "Derived, not official (checked against PFR's team pages). net_passing_yards = passing_yards - sack_yards_lost, which is what PFR calls team passing yards. Plays with no inferred posteam (about 0.5%) aren't counted. Team codes are dim_games historical codes. /v1/stats/team serves this for seasons before 1999.",
+    },
     # --- player stats ---
     "fact_player_game_stats": {
         "description": "One row per player per game: passing, rushing, receiving, and fantasy stat lines with EPA.",

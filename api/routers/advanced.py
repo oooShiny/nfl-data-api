@@ -8,6 +8,17 @@ from api.models.responses import PaginatedResponse
 
 router = APIRouter(tags=["advanced"])
 
+# Pre-1999 season stats are derived from PFR play-by-play
+# (fact_historical_*_season_stats, source = 'pfr_pbp'); 1999+ come from nflverse.
+HISTORICAL_LAST_SEASON = 1998
+
+
+def _season_source(nflverse: str, historical: str, season: int | None) -> str:
+    """Table (or union of both) to read for a season filter."""
+    if season is None:
+        return f"(SELECT * FROM {nflverse} UNION ALL BY NAME SELECT * FROM {historical})"
+    return historical if season <= HISTORICAL_LAST_SEASON else nflverse
+
 
 @router.get("/stats/team", response_model=PaginatedResponse[dict[str, Any]])
 def team_stats(
@@ -19,12 +30,16 @@ def team_stats(
     offset: int = Query(default=0, ge=0),
     db: duckdb.DuckDBPyConnection = Depends(get_db),
 ):
+    """Team season totals. 1999+ from nflverse; 1970-1998 derived from PFR
+    play-by-play (source = 'pfr_pbp': passing, rushing and sack totals only,
+    historical team codes)."""
     filters = [
         ("season = ?", season),
         ("team = ?", team),
         ("season_type = ?", season_type),
     ]
-    return list_table(db, "ref_team_stats", filters, "season DESC, team", limit, offset)
+    table = _season_source("ref_team_stats", "fact_historical_team_season_stats", season)
+    return list_table(db, table, filters, "season DESC, team", limit, offset)
 
 
 @router.get("/stats/season", response_model=PaginatedResponse[dict[str, Any]])
@@ -38,16 +53,21 @@ def player_season_stats(
     offset: int = Query(default=0, ge=0),
     db: duckdb.DuckDBPyConnection = Depends(get_db),
 ):
+    """Player season stats. 1999+ from nflverse; 1970-1998 derived from PFR
+    play-by-play (source = 'pfr_pbp': passing, rushing and receiving totals,
+    REG and POST, one row per player and team)."""
     filters = [
         ("player_id = ?", player_id),
         ("season = ?", season),
         ("season_type = ?", season_type),
         ("position = ?", position),
     ]
-    return list_table(
-        db, "fact_player_season_stats", filters,
-        "season DESC, fantasy_points_ppr DESC NULLS LAST", limit, offset,
-    )
+    table = _season_source("fact_player_season_stats", "fact_historical_player_season_stats", season)
+    order = ("season DESC, fantasy_points_ppr DESC NULLS LAST, "
+             "passing_yards + rushing_yards + receiving_yards DESC")
+    if season is not None and season <= HISTORICAL_LAST_SEASON:
+        order = "passing_yards + rushing_yards + receiving_yards DESC"
+    return list_table(db, table, filters, order, limit, offset)
 
 
 @router.get("/stats/ngs/passing", response_model=PaginatedResponse[dict[str, Any]])

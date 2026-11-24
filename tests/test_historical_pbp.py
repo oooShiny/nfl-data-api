@@ -21,9 +21,21 @@ from pipeline.silver.pfr_pbp_parser import parse_detail
      {"play_type": "pass", "passer": "Kerry Collins", "receiver": "Muhsin Muhammad", "yards_gained": None}),
     ("Tony Banks sacked by Jared Tomich for 9 yards",
      {"play_type": "pass", "passer": "Tony Banks", "sacker": "Jared Tomich", "yards_gained": -9}),
+    ("Jake Plummer sacked by Kavika Pittman and Tony Tolbert for 8 yards",  # split sack
+     {"play_type": "pass", "passer": "Jake Plummer", "sacker": "Kavika Pittman", "yards_gained": -8}),
+    ("Troy Aikman pass intended for Eric Bjornson is intercepted by Ronald McKinnon at AC30 and returned for 4 yards",
+     {"play_type": "pass", "passer": "Troy Aikman", "receiver": "Eric Bjornson", "interceptor": "Ronald McKinnon"}),
+    # The defender fumbles on the return; the receiver has initials.
+    ("J.J. Stokes pass intended for R.W. McQuarters. Ty Law fumbles is intercepted by Ty Law at NE40",
+     {"play_type": "pass", "passer": "J.J. Stokes", "receiver": "R.W. McQuarters", "interceptor": "Ty Law"}),
+    ("Elvis Grbac pass. Todd Lyght fumbles is intercepted by Todd Lyght at SL4 and returned for 14 yards",
+     {"play_type": "pass", "passer": "Elvis Grbac", "receiver": None, "interceptor": "Todd Lyght"}),
     ("Curtis Conway 4 yard pass from Erik Kramer",  # unrecognized pass phrasing: type only
      {"play_type": "pass", "passer": None}),
-    ("Tom Rouen aborted snap", {"play_type": "other", "rusher": None}),
+    ("Tom Rouen aborted snap", {"play_type": "run", "rusher": "Tom Rouen", "yards_gained": 0}),
+    ("Dan Marino fumbles, recovered by Dan Marino at NY50", {"play_type": "run", "rusher": "Dan Marino"}),
+    ("Fred Lane left end for no gain. Penalty on Matt Elliott: False Start, 5 yards (accepted) (no play)",
+     {"play_type": "no_play", "rusher": None}),
     ("Kerry Collins spiked the ball", {"play_type": "qb_spike", "passer": "Kerry Collins"}),
     ("John Kasay kicks off 71 yards, returned by Tim Dwight for 19 yards",
      {"play_type": "kickoff", "kicker": "John Kasay", "returner": "Tim Dwight"}),
@@ -69,7 +81,7 @@ def test_clean_historical_pbp(tmp_path):
     assert df["quarter"].to_list() == [1, 1, 5]
     assert df["yardline_side"].to_list() == ["DEN", "NE", None]  # NWE -> NE
     assert df["yardline"].to_list() == [30, 25, None]
-    assert df["play_type"].to_list() == ["kickoff", "pass", "other"]
+    assert df["play_type"].to_list() == ["kickoff", "pass", "run"]  # a botched snap is a rush
     assert df["touchdown"].to_list() == [False, False, True]
     assert df["clock"].to_list() == ["15:00", None, None]
     assert df.schema["exp_pts_after"] == pl.Float64
@@ -90,7 +102,7 @@ def test_load_fact_historical_plays_and_endpoint(tmp_path, monkeypatch):
     loader.load_fact_historical_plays(con)
 
     rows = con.execute("SELECT play_seq, play_type, passer, touchdown FROM fact_historical_plays ORDER BY 1").fetchall()
-    assert rows == [(1, "kickoff", None, False), (2, "pass", "Drew Bledsoe", False), (3, "other", None, True)]
+    assert rows == [(1, "kickoff", None, False), (2, "pass", "Drew Bledsoe", False), (3, "run", None, True)]
 
     out = list_historical_plays(None, season=1998, team="NE", play_type="pass", limit=50, offset=0, db=con,
                                 game_id=None, week=None, posteam=None, player_id=None)

@@ -33,3 +33,16 @@ def test_match_player_ids():
     ])
     assert match_player_ids(names, rosters)["player_id"].to_list() == [
         "00-E", "00-L", "00-C", None, "00-T", None, None]
+
+
+def test_same_name_on_both_teams_resolved_by_side():
+    rosters = pl.DataFrame([
+        dict(season=1998, team="NYG", player_name="Gary Brown", player_id="00-RB"),
+        dict(season=1998, team="SF", player_name="Gary Brown", player_id="00-DT"),
+    ])
+    names = pl.DataFrame([
+        dict(season=1998, home_team="SF", away_team="NYG", name="Gary Brown", team="NYG"),
+        dict(season=1998, home_team="SF", away_team="NYG", name="Gary Brown", team="SF"),
+        dict(season=1998, home_team="SF", away_team="NYG", name="Gary Brown", team=None),
+    ])
+    assert match_player_ids(names, rosters)["player_id"].to_list() == ["00-RB", "00-DT", None]

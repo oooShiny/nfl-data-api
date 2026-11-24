@@ -39,8 +39,8 @@ Defaults to the most recent season if `season` is omitted.
 GET /v1/stats/passing?season=&week=&season_type=&team=
 GET /v1/stats/rushing?season=&week=&season_type=&team=
 GET /v1/stats/receiving?season=&week=&season_type=&team=
-GET /v1/stats/season?player_id=&season=&season_type=&position=     # season totals incl. defense/kicking
-GET /v1/stats/team?season=&team=&season_type=                       # team box scores
+GET /v1/stats/season?player_id=&season=&season_type=&position=     # season totals incl. defense/kicking; pre-1999 derived from PFR play-by-play
+GET /v1/stats/team?season=&team=&season_type=                       # team box scores; pre-1999 derived from PFR play-by-play
 ```
 
 ### Advanced stats
@@ -152,6 +152,8 @@ Sourced from [nflverse-data](https://github.com/nflverse/nflverse-data) public r
 | `fact_player_game_stats` | 134K | Weekly passing/rushing/receiving box-score stats, advanced metrics (EPA, PACR, DAKOTA, RACR, target/air-yards share, WOPR), fantasy points |
 | `fact_player_season_stats` | 12K | Season-total player stats — adds defense, special teams, and kicking to the weekly stats above |
 | `ref_team_stats` | 336 | Season-total team offense/defense box scores |
+| `fact_historical_player_season_stats` | 2K | Pre-1999 player passing/rushing/receiving season totals summed from `fact_historical_plays` (`source = 'pfr_pbp'`), checked against PFR's official season tables |
+| `fact_historical_team_season_stats` | 126 | Pre-1999 team passing/rushing season totals, same source |
 | `fact_snap_counts` | 325K | Offense/defense/special-teams snap counts and percentages per player per game |
 | `fact_ngs_passing` | 5.9K | NFL Next Gen Stats — time to throw, air yards, CPOE (2016+) |
 | `fact_ngs_receiving` | 15K | NFL Next Gen Stats — separation, cushion, YAC over expected (2016+) |

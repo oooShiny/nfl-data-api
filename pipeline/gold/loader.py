@@ -1766,12 +1766,17 @@ def _match_historical_player_ids(con: duckdb.DuckDBPyConnection) -> None:
     if con.execute("SELECT COUNT(*) FROM fact_rosters WHERE season <= 1998").fetchone()[0] == 0:
         console.print("  [yellow]fact_historical_plays: fact_rosters empty, player ids not matched[/yellow]")
         return
-    cols = ", ".join(HISTORICAL_NAME_COLUMNS)
-    names = con.execute(f"""
-        SELECT DISTINCT season, home_team, away_team, name
-        FROM (UNPIVOT (SELECT season, home_team, away_team, {cols} FROM fact_historical_plays)
-              ON {cols} INTO NAME role VALUE name)
-    """).pl()
+    # The player's side on the play, used only to choose between two players
+    # of the same name on opposite teams; NULL for roles that can be either.
+    # {t} is the table prefix.
+    side = {c: "NULL" for c in HISTORICAL_NAME_COLUMNS} | {
+        "passer": "{t}posteam", "rusher": "{t}posteam", "receiver": "{t}posteam", "punter": "{t}posteam",
+        "kicker": "CASE WHEN {t}play_type = 'kickoff' THEN {t}defteam ELSE {t}posteam END",
+        "interceptor": "{t}defteam", "sacker": "{t}defteam",
+    }
+    names = con.execute(" UNION ".join(
+        f"SELECT DISTINCT season, home_team, away_team, {c} AS name, {side[c].format(t='')} AS team "
+        f"FROM fact_historical_plays WHERE {c} IS NOT NULL" for c in HISTORICAL_NAME_COLUMNS)).pl()
     rosters = con.execute(
         "SELECT season, team, player_name, player_id FROM fact_rosters WHERE season <= 1998").pl()
     matched = match_player_ids(names, rosters).filter(pl.col("player_id").is_not_null())
@@ -1781,11 +1786,22 @@ def _match_historical_player_ids(con: duckdb.DuckDBPyConnection) -> None:
             UPDATE fact_historical_plays p SET {c}_id = m.player_id
             FROM _hist_ids m
             WHERE m.season = p.season AND m.home_team = p.home_team AND m.away_team = p.away_team
-              AND m.name = p.{c}
+              AND m.name = p.{c} AND m.team IS NOT DISTINCT FROM {side[c].format(t='p.')}
         """)
     con.unregister("_hist_ids")
     console.print(f"  [green]✓[/green] fact_historical_plays: player ids for {len(matched):,} of "
-                  f"{len(names):,} game/name pairs")
+                  f"{len(names):,} game/name/side combinations")
+
+
+def load_historical_season_stats(con: duckdb.DuckDBPyConnection) -> None:
+    from pipeline.gold.historical_stats import build_historical_season_stats
+
+    if con.execute("SELECT count(*) FROM fact_historical_plays").fetchone()[0] == 0:
+        console.print("  [yellow]historical season stats: fact_historical_plays empty[/yellow]")
+        return
+    players, teams = build_historical_season_stats(con)
+    console.print(f"  [green]✓[/green] fact_historical_player_season_stats: {players:,} rows, "
+                  f"fact_historical_team_season_stats: {teams:,} rows")
 
 
 # ── Name resolution back-fill ────────────────────────────────────────────────
@@ -1837,6 +1853,7 @@ LOADERS = [
     ("fact_rosters", load_fact_rosters),
     # After fact_rosters: player names are matched to gsis_ids through rosters.
     ("fact_historical_plays", load_fact_historical_plays),
+    ("historical season stats", load_historical_season_stats),
     ("fact_weekly_rosters", load_fact_weekly_rosters),
     ("fact_snap_counts", load_fact_snap_counts),
     ("fact_depth_charts", load_fact_depth_charts),
