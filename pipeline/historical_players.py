@@ -1,7 +1,8 @@
 """Match player names in pre-1999 play-by-play to gsis_ids.
 
 PFR's play-by-play gives names only ("John Elway"). nflverse rosters
-(fact_rosters) list every player on every team back to 1920 with a gsis_id,
+(fact_rosters, in dim_games' team codes before 1999) list every player on
+every team back to 1920 with a gsis_id,
 so a name can be matched against the rosters of the two teams in the game.
 In order, a name gets an id from the first of these that finds exactly one
 player:
@@ -29,22 +30,6 @@ NAME_COLUMNS = [
 ]
 
 _SUFFIXES = {"jr", "sr", "ii", "iii", "iv", "v"}
-
-# dim_games codes (pre-1999) -> the codes nflverse rosters use for that team.
-# Rosters file the St. Louis Cardinals and the Rams under LA in the 1970s,
-# and use LV/RAI, LAC, PHO and BOS for the Raiders, Chargers, Phoenix
-# Cardinals and 1970 Patriots.
-ROSTER_CODES = {
-    "OAK": ("OAK", "LV", "RAI"),
-    "RAI": ("RAI", "LV"),
-    "SD": ("SD", "LAC"),
-    "SLC": ("SLC", "LA"),
-    "LA": ("LA", "RAM"),
-    "STL": ("STL", "LA"),
-    "PHX": ("PHX", "PHO"),
-    "NE": ("NE", "BOS"),
-}
-
 
 def _tokens(name: str) -> list[str]:
     s = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode().lower()
@@ -96,7 +81,7 @@ def match_player_ids(names: pl.DataFrame, rosters: pl.DataFrame) -> pl.DataFrame
     def lookup(season, home, away, name):
         if name is None:
             return None
-        teams = ROSTER_CODES.get(home, (home,)) + ROSTER_CODES.get(away, (away,))
+        teams = (home, away)  # fact_rosters uses dim_games codes before 1999
         k = name_key(name)
         ids = set().union(*(by_team.get((season, t, k), set()) for t in teams))
         if not ids:

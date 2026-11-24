@@ -73,7 +73,6 @@ def base_clean(df: pl.DataFrame, team_cols: list[str] | None = None) -> pl.DataF
 
 TEAM_COLS_BY_DATASET = {
     "schedules": ["home_team", "away_team"],
-    "rosters": ["team"],
     "weekly_rosters": ["team"],
     "depth_charts": ["club_code", "team"],  # 2025+ files use `team`
     "snap_counts": ["team"],
@@ -119,10 +118,23 @@ def _clean_players(df: pl.DataFrame) -> pl.DataFrame:
     return df
 
 
+# Raw nflverse roster codes before 1999 -> dim_games' historical codes. The
+# raw codes are what teams were called at the time (STL is the Cardinals
+# through 1987 and the Rams from 1995), so mapping them to today's franchise
+# codes would need the season; matching dim_games keeps old rosters joinable
+# to old games and to fact_historical_plays.
+_PRE_1999_ROSTER_CODES = {"WAS": "WSH", "RAM": "LA", "PHO": "PHX", "BOS": "NE"}
+
+
 def _clean_rosters(df: pl.DataFrame) -> pl.DataFrame:
     if "season" in df.columns:
         df = df.with_columns(pl.col("season").cast(pl.Int16))
-    return df
+    if "team" not in df.columns:
+        return df
+    era = pl.col("team").replace(_PRE_1999_ROSTER_CODES)
+    era = pl.when((pl.col("team") == "STL") & pl.col("season").is_between(1960, 1987)).then(pl.lit("SLC")).otherwise(era)
+    current = pl.col("team").replace(_team_map())
+    return df.with_columns(pl.when(pl.col("season") < 1999).then(era).otherwise(current).alias("team"))
 
 
 def _clean_elo(df: pl.DataFrame) -> pl.DataFrame:

@@ -447,6 +447,8 @@ def load_fact_rosters(con: duckdb.DuckDBPyConnection) -> None:
     if not files:
         console.print("  [yellow]fact_rosters: no silver files[/yellow]")
         return
+    # Rebuilt from every season's file, so rows whose team code changed don't linger.
+    con.execute("DELETE FROM fact_rosters")
     con.execute(f"""
         INSERT OR REPLACE INTO fact_rosters
         SELECT
