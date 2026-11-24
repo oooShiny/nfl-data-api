@@ -27,11 +27,24 @@ TWO_PT_RE = re.compile(r"^Two Point Attempt:\s*")
 SPIKE_RE = re.compile(rf"^(?P<p>{NAME}) spiked the ball")
 KNEEL_RE = re.compile(rf"^(?P<p>{NAME}) kneels for (?P<y>-?\d+) yards")
 SCRAMBLE_RE = re.compile(rf"^(?P<p>{NAME}) scrambles(?:\s+[a-z][a-z' ]*?)? {YARDS}(?P<td>, touchdown)?")
-SACK_RE = re.compile(rf"^(?P<p>{NAME}) sacked(?: by (?P<sacker>{NAME}))?(?: for (?P<y>-?\d+) yards?)?")
+# Split sacks name two defenders ("sacked by A and B for 8 yards"); sacker is the first.
+SACK_RE = re.compile(
+    rf"^(?P<p>{NAME}) sacked(?: by (?P<sacker>{NAME})(?: and {NAME})?)?(?: for (?P<y>-?\d+) yards?)?"
+)
 INT_RE = re.compile(
     rf"^(?P<passer>{NAME}) pass (?:incomplete )?(?:intended for (?P<receiver>{NAME}) )?"
     rf"is intercepted by (?P<interceptor>{NAME})"
 )
+# An interception where the defender fumbles on the return:
+# "X pass intended for Y. Z fumbles is intercepted by Z ..." (the same Z
+# twice, which also pins down where Y ends when it has initials).
+INT_FUMBLE_RE = re.compile(
+    rf"^(?P<passer>{NAME}) pass(?: intended for (?P<receiver>.+?))?\. (?P<interceptor>{NAME}) fumbles "
+    rf"is intercepted by (?P=interceptor)\b"
+)
+# A botched snap, officially a rush by the player who fumbled (0 yards here;
+# PFR's text rarely says where the ball was recovered relative to the snap).
+ABORTED_RE = re.compile(rf"^(?P<p>{NAME}) (?:aborted snap|fumbles(?: \(aborted\))?, recovered by)")
 PASS_COMPLETE_RE = re.compile(
     rf"^(?P<passer>{NAME}) pass complete to (?P<receiver>{NAME}) {YARDS}(?P<td>, touchdown)?"
 )
@@ -55,16 +68,22 @@ _CLASSIFIERS = [
     ("spike", SPIKE_RE),
     ("kneel", KNEEL_RE),
     ("scramble", SCRAMBLE_RE),
+    ("int", INT_FUMBLE_RE),
     ("int", INT_RE),
     ("sack", SACK_RE),
     ("pass_complete", PASS_COMPLETE_RE),
     ("pass_incomplete", PASS_INCOMPLETE_RE),
     ("kickoff", KICKOFF_RE),
+    ("aborted", ABORTED_RE),
     ("punt", PUNT_RE),
     ("field_goal", FIELD_GOAL_RE),
     ("extra_point", EXTRA_POINT_RE),
     ("rush", RUSH_RE),
 ]
+
+# Pass-type patterns come first; any other text with " pass " in it is a
+# pass we couldn't parse, checked before the kicking and rushing patterns.
+_FIRST_NON_PASS = next(i for i, (c, _) in enumerate(_CLASSIFIERS) if c == "kickoff")
 
 # Same play_type vocabulary as nflfastR's fact_plays (sacks are pass plays,
 # kneels are qb_kneel, scrambles are runs).
@@ -76,6 +95,7 @@ PLAY_TYPE_BY_CATEGORY = {
     "sack": "pass",
     "rush": "run",
     "scramble": "run",
+    "aborted": "run",
     "kneel": "qb_kneel",
     "spike": "qb_spike",
     "kickoff": "kickoff",
@@ -94,6 +114,7 @@ ROLE_FOR_CATEGORY = {
     "sack": {"p": "passer", "sacker": "sacker"},
     "rush": {"p": "rusher"},
     "scramble": {"p": "rusher"},
+    "aborted": {"p": "rusher"},
     "kneel": {"p": "rusher"},
     "spike": {"p": "passer"},
     "kickoff": {"p": "kicker", "returner": "returner"},
@@ -103,7 +124,7 @@ ROLE_FOR_CATEGORY = {
 }
 
 # Categories whose `y` group is yards gained by the offense.
-_YARDS_GAINED_CATEGORIES = {"pass_complete", "rush", "scramble", "kneel", "sack"}
+_YARDS_GAINED_CATEGORIES = {"pass_complete", "rush", "scramble", "kneel", "sack", "aborted"}
 
 PLAYER_COLUMNS = [
     "passer", "rusher", "receiver", "interceptor", "sacker",
@@ -120,13 +141,13 @@ def classify(detail: str) -> tuple[str, dict]:
         return "no_play", {}
     if PENALTY_ONLY_RE.match(detail):
         return "penalty_only", {}
-    for category, regex in _CLASSIFIERS[:7]:
+    for category, regex in _CLASSIFIERS[:_FIRST_NON_PASS]:
         m = regex.match(detail)
         if m:
             return category, m.groupdict()
     if " pass " in detail.lower() and "interference" not in detail.lower():
         return "pass_unmatched", {}
-    for category, regex in _CLASSIFIERS[7:]:
+    for category, regex in _CLASSIFIERS[_FIRST_NON_PASS:]:
         m = regex.match(detail)
         if m:
             return category, m.groupdict()

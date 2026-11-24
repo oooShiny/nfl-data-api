@@ -419,7 +419,17 @@ def _clean_historical_pbp(df: pl.DataFrame) -> pl.DataFrame:
     ])
     from pipeline.silver.pfr_possession import infer_possession
 
-    return infer_possession(df)
+    return infer_possession(df, _historical_rosters(df["season"].unique().to_list()))
+
+
+def _historical_rosters(seasons: list[int]) -> pl.DataFrame | None:
+    """Silver nflverse rosters (dim_games team codes before 1999) for possession inference."""
+    files = [SILVER_DIR / "rosters" / f"roster_{s}.parquet" for s in seasons]
+    files = [f for f in files if f.exists()]
+    if not files:
+        return None
+    return pl.concat([pl.read_parquet(f).select(pl.col("season").cast(pl.Int16), "team",
+                                                pl.col("full_name").alias("player_name")) for f in files])
 
 
 _SPECIFIC_CLEANERS = {

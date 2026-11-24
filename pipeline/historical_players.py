@@ -61,24 +61,29 @@ def initial_key(name: str) -> str | None:
 
 
 def match_player_ids(names: pl.DataFrame, rosters: pl.DataFrame) -> pl.DataFrame:
-    """names: season, home_team, away_team, name. rosters: season, team, player_name, player_id.
+    """names: season, home_team, away_team, name, and optionally team (the
+    player's side on the play, e.g. posteam for a passer). rosters: season,
+    team, player_name, player_id.
 
-    Returns names with a player_id column (null when no unique match).
+    Returns names with a player_id column (null when no unique match). When
+    a name fits a player on each team, team picks between them.
     """
     by_team: dict[tuple, set] = defaultdict(set)
     by_season: dict[tuple, set] = defaultdict(set)
     by_initial: dict[tuple, set] = defaultdict(set)
+    on_team: set[tuple] = set()
     for season, team, player_name, pid in rosters.select("season", "team", "player_name", "player_id").iter_rows():
         if player_name is None or pid is None:
             continue
         k = name_key(player_name)
         by_team[(season, team, k)].add(pid)
         by_season[(season, k)].add(pid)
+        on_team.add((season, team, pid))
         ik = initial_key(player_name)
         if ik:
             by_initial[(season, team, ik)].add(pid)
 
-    def lookup(season, home, away, name):
+    def lookup(season, home, away, name, side=None):
         if name is None:
             return None
         teams = (home, away)  # fact_rosters uses dim_games codes before 1999
@@ -90,7 +95,10 @@ def match_player_ids(names: pl.DataFrame, rosters: pl.DataFrame) -> pl.DataFrame
             ik = initial_key(name)
             if ik:
                 ids = set().union(*(by_initial.get((season, t, ik), set()) for t in teams))
+        if len(ids) > 1 and side is not None:
+            ids = {i for i in ids if (season, side, i) in on_team}
         return next(iter(ids)) if len(ids) == 1 else None
 
-    ids = [lookup(*r) for r in names.select("season", "home_team", "away_team", "name").iter_rows()]
+    cols = ["season", "home_team", "away_team", "name"] + (["team"] if "team" in names.columns else [])
+    ids = [lookup(*r) for r in names.select(cols).iter_rows()]
     return names.with_columns(pl.Series("player_id", ids, dtype=pl.Utf8))

@@ -29,7 +29,11 @@ offense on scrimmage plays; the kicking team on punts, field goals and extra
 points; the RECEIVING team on kickoffs.
 """
 
+from collections.abc import Callable
+
 import polars as pl
+
+from pipeline.historical_players import name_key
 
 _TOL = 0.015  # PFR rounds expected points to 2 decimals
 
@@ -39,6 +43,7 @@ _SCORE_COST = 12.0     # going against a scoring play
 _KICK_PRIOR_COST = 2.0  # TD -> try -> kickoff and FG -> kickoff are by the same team
 _FIELD_WEIGHT = 1.0    # per point of expected-points misfit
 _PLAYER_COST = 3.0     # a player's play assigned to the other team than his majority
+_ROSTER_COST = 4.0     # a player's play assigned to the team he isn't on (nflverse rosters)
 
 _OFFENSE_ROLES = {"passer", "rusher", "receiver"}
 
@@ -85,8 +90,13 @@ def _player_roles(r: dict) -> list[str]:
     return names
 
 
-def _infer_game(rows: list[dict], home: str, away: str) -> list[str | None]:
-    """Perspective team (offense / kicking team) for each play of one game; state 0 = home."""
+def _infer_game(rows: list[dict], home: str, away: str,
+                roster_side: Callable[[str], int | None] = lambda name: None) -> list[str | None]:
+    """Perspective team (offense / kicking team) for each play of one game; state 0 = home.
+
+    roster_side(name) is 0 (home) or 1 (away) when the name is on exactly one
+    of the two teams' rosters, else None.
+    """
     n = len(rows)
     emit = [[0.0, 0.0] for _ in range(n)]
     trans: list[list[float] | None] = [None] * n
@@ -132,6 +142,14 @@ def _infer_game(rows: list[dict], home: str, away: str) -> list[str | None]:
             emit[i][1] += _FIELD_WEIGHT * abs(before - _field_position_ep(100 - yl100_home, r["down"]))
             informative[i] = True
 
+        # Rosters: the only evidence in the few games where PFR has no
+        # expected points.
+        for name in _player_roles(r):
+            side_ = roster_side(name)
+            if side_ is not None:
+                emit[i][1 - side_] += _ROSTER_COST
+                informative[i] = True
+
     path = _viterbi(emit, trans)
 
     # Second pass: player consistency.
@@ -159,15 +177,39 @@ def _infer_game(rows: list[dict], home: str, away: str) -> list[str | None]:
             for i in range(n)]
 
 
-def infer_possession(df: pl.DataFrame) -> pl.DataFrame:
-    """Add posteam, defteam and yardline_100 to cleaned historical play-by-play."""
+def _roster_lookup(rosters: pl.DataFrame | None) -> dict[tuple, set]:
+    teams: dict[tuple, set] = {}
+    if rosters is None:
+        return teams
+    for season, team, name in rosters.select("season", "team", "player_name").iter_rows():
+        if name:
+            teams.setdefault((season, name_key(name)), set()).add(team)
+    return teams
+
+
+def infer_possession(df: pl.DataFrame, rosters: pl.DataFrame | None = None) -> pl.DataFrame:
+    """Add posteam, defteam, yardline_100 and drive to cleaned historical play-by-play.
+
+    rosters (season, team, player_name; dim_games team codes) adds roster
+    evidence for the players on each play.
+    """
     df = df.sort("game_id", "play_seq")
+    on_roster = _roster_lookup(rosters)
     cols = ["exp_pts_before", "exp_pts_after", "home_score", "away_score", "yardline_side", "yardline",
             "down", "play_type", "two_point_attempt", "touchdown", "passer", "rusher", "receiver",
             "punter", "kicker"]
     perspective: list[str | None] = []
     for (_game_id,), g in df.group_by(["game_id"], maintain_order=True):
-        perspective += _infer_game(g.select(cols).to_dicts(), g["home_team"][0], g["away_team"][0])
+        season = g["season"][0] if "season" in g.columns else None
+        home, away = g["home_team"][0], g["away_team"][0]
+
+        def roster_side(name, season=season, home=home, away=away):
+            teams = on_roster.get((season, name_key(name)), set())
+            if (home in teams) == (away in teams):
+                return None
+            return 0 if home in teams else 1
+
+        perspective += _infer_game(g.select(cols).to_dicts(), home, away, roster_side)
     df = df.with_columns(pl.Series("_ep_team", perspective, dtype=pl.Utf8))
     other = pl.when(pl.col("_ep_team") == pl.col("home_team")).then(pl.col("away_team")).otherwise(pl.col("home_team"))
     # Kickoffs are from the kicking team's view; nflverse's posteam is the receiver.
