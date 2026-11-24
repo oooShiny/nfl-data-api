@@ -1489,6 +1489,25 @@ def load_fact_game_scoring(con: duckdb.DuckDBPyConnection) -> None:
     console.print(f"  [green]✓[/green] fact_game_scoring: {n:,} rows")
 
 
+def load_fact_historical_plays(con: duckdb.DuckDBPyConnection) -> None:
+    files = _silver_files("historical_pbp")
+    if not files:
+        console.print("  [yellow]fact_historical_plays: no silver files found[/yellow]")
+        return
+    glob = str(SILVER_DIR / "historical_pbp" / "*.parquet")
+    cols = [r[0] for r in con.execute("SELECT column_name FROM information_schema.columns "
+                                      "WHERE table_name = 'fact_historical_plays' ORDER BY ordinal_position").fetchall()]
+    con.execute("DELETE FROM fact_historical_plays")
+    con.execute(f"""
+        INSERT INTO fact_historical_plays ({", ".join(cols)})
+        SELECT {", ".join(cols)}
+        FROM read_parquet('{glob}', union_by_name=true)
+        WHERE game_id IS NOT NULL AND season <= 1998
+    """)
+    n = con.execute("SELECT COUNT(*) FROM fact_historical_plays").fetchone()[0]
+    console.print(f"  [green]✓[/green] fact_historical_plays: {n:,} rows")
+
+
 # ── Name resolution back-fill ────────────────────────────────────────────────
 
 def apply_name_resolution(con: duckdb.DuckDBPyConnection) -> None:
@@ -1522,6 +1541,7 @@ LOADERS = [
     ("dim_games", load_dim_games),
     ("dim_games (historical)", load_historical_games),
     ("fact_game_scoring", load_fact_game_scoring),
+    ("fact_historical_plays", load_fact_historical_plays),
     ("fact_player_game_stats", load_fact_player_game_stats),
     ("fact_player_season_stats", load_fact_player_season_stats),
     ("fact_ngs_passing", load_fact_ngs_passing),

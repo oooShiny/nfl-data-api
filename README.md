@@ -23,6 +23,7 @@ GET /v1/players/{gsis_id}/stats?season=&week=&season_type=
 GET /v1/games?season=&week=&team=&game_type=                # 1970-present
 GET /v1/games/{game_id}
 GET /v1/games/scoring?game_id=&season=&team=               # scoring-play summaries, 1970-1998
+GET /v1/games/historical-plays?game_id=&season=&week=&team=&play_type=   # pre-1999 play-by-play (PFR); game_id or season required
 GET /v1/games/head-to-head?team1=&team2=&season=&game_type=&top_n=   # matchup history, records, biggest wins, top performances
 ```
 
@@ -112,7 +113,7 @@ with `web/data_coverage.php`.
 
 Sourced from [nflverse-data](https://github.com/nflverse/nflverse-data) public releases.
 
-**At a glance:** every regular-season and playoff game from **1999 to the current season** (~7,500 games), every play (**1.28M**) with EPA/WPA, weekly stats for **25K players**, plus rosters, depth charts, injuries, snap counts, draft history, combine results, contracts, and trades going back to 1999 (combine/contracts/trades coverage varies by source). Game results extend back to **1970** (pre-1999 via Pro-Football-Reference), with scoring-play detail for 1970-1998.
+**At a glance:** every regular-season and playoff game from **1999 to the current season** (~7,500 games), every play (**1.28M**) with EPA/WPA, weekly stats for **25K players**, plus rosters, depth charts, injuries, snap counts, draft history, combine results, contracts, and trades going back to 1999 (combine/contracts/trades coverage varies by source). Game results extend back to **1970** (pre-1999 via Pro-Football-Reference), with scoring-play detail for 1970-1998 and full Pro-Football-Reference play-by-play being back-filled from 1998 (see `fact_historical_plays`).
 
 | Layer | Contents |
 |---|---|
@@ -138,6 +139,7 @@ Sourced from [nflverse-data](https://github.com/nflverse/nflverse-data) public r
 | `fact_pass_plays` | 524K | Pass-specific detail: passer/receiver, air yards, YAC, completion, CPOE |
 | `fact_rush_plays` | 385K | Rush-specific detail: rusher, run location/gap, TDs |
 | `fact_kick_plays` | 314K | Punts, field goals, extra points, kickoffs, returns |
+| `fact_historical_plays` | 42.7K | Pre-1999 play-by-play from Pro-Football-Reference (1998 so far, back-filled one season at a time): down/distance, field position, score, description, PFR expected points, and play type/yards/TD/player names parsed from the description |
 | `fact_pbp_participation` | 486K | Personnel groupings, formations, pass rush/coverage detail per play (2016+) |
 | `fact_ftn_charting` | 185K | Play-design charting — motion, play-action, RPO, blitz, pressure, drops (2022+) |
 

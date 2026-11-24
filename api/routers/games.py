@@ -61,6 +61,45 @@ def list_game_scoring(
     return list_table(db, "fact_game_scoring", filters, "game_id, play_seq", limit, offset)
 
 
+@router.get("/games/historical-plays", response_model=PaginatedResponse[dict[str, Any]])
+def list_historical_plays(
+    request: Request,
+    game_id: str | None = None,
+    season: int | None = None,
+    week: int | None = None,
+    team: str | None = None,
+    play_type: str | None = None,
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    db: duckdb.DuckDBPyConnection = Depends(get_db),
+):
+    """Full play-by-play for pre-1999 games, scraped from Pro-Football-Reference.
+
+    Descriptions plus parsed play_type, yards, touchdowns and player names
+    (free text). No possession team or nflfastR EPA; see /v1/plays for 1999+.
+    """
+    if game_id is None and season is None:
+        raise HTTPException(status_code=422, detail="Either 'game_id' or 'season' is required.")
+    filters = [
+        ("game_id = ?", game_id),
+        ("season = ?", season),
+        ("week = ?", week),
+        ("play_type = ?", play_type),
+    ]
+    where, params = _build_filter(filters)
+    if team is not None:
+        where += f" {'AND' if where else 'WHERE'} (home_team = ? OR away_team = ?)"
+        params += [team, team]
+
+    total = db.execute(f"SELECT COUNT(*) FROM fact_historical_plays {where}", params).fetchone()[0]
+    rows = db.execute(
+        f"SELECT * FROM fact_historical_plays {where} ORDER BY game_id, play_seq LIMIT ? OFFSET ?",
+        params + [limit, offset],
+    ).fetchall()
+    cols = [d[0] for d in db.description]
+    return PaginatedResponse(data=[dict(zip(cols, r)) for r in rows], total=total, limit=limit, offset=offset)
+
+
 @router.get("/games/head-to-head", response_model=dict[str, Any])
 def head_to_head(
     request: Request,

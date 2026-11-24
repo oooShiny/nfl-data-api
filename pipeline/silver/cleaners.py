@@ -318,6 +318,85 @@ def _clean_historical_scoring(df: pl.DataFrame) -> pl.DataFrame:
     ])
 
 
+# PFR's field-position team codes -> the codes dim_games uses for pre-1999 games.
+_PFR_LOCATION_CODES = {
+    "GNB": "GB", "KAN": "KC", "NOR": "NO", "NWE": "NE", "SDG": "SD", "SFO": "SF",
+    "TAM": "TB", "WAS": "WSH", "RAM": "LA", "PHO": "PHX",
+}
+
+_HISTORICAL_PBP_STR_COLS = [
+    "game_id", "game_type", "home_team", "away_team", "boxscore_url",
+    "quarter", "time", "down", "yds_to_go", "location",
+    "away_score", "home_score", "detail", "exp_pts_before", "exp_pts_after",
+]
+
+
+def _clean_historical_pbp(df: pl.DataFrame) -> pl.DataFrame:
+    from pipeline.silver.pfr_pbp_parser import OUTPUT_COLUMNS, parse_detail
+
+    # base_clean drops all-null columns; put back any the select below needs.
+    df = df.with_columns([
+        pl.lit(None, dtype=pl.Utf8).alias(c) for c in _HISTORICAL_PBP_STR_COLS if c not in df.columns
+    ])
+    df = df.with_columns(
+        pl.col("season").cast(pl.Int16),
+        pl.col("week").cast(pl.Int16),
+        pl.col("play_seq").cast(pl.Int32),
+        pl.col("quarter").replace({"OT": "5"}).cast(pl.Int16, strict=False),
+        pl.col("down").cast(pl.Int16, strict=False),
+        pl.col("yds_to_go").cast(pl.Int16, strict=False).alias("ydstogo"),
+        pl.col("away_score").cast(pl.Int16, strict=False),
+        pl.col("home_score").cast(pl.Int16, strict=False),
+        pl.col("exp_pts_before").cast(pl.Float64, strict=False),
+        pl.col("exp_pts_after").cast(pl.Float64, strict=False),
+        pl.col("location").str.extract(r"^([A-Z]+) ").alias("_side_raw"),
+        pl.col("location").str.extract(r"(\d+)$").cast(pl.Int16, strict=False).alias("yardline"),
+    ).sort("game_id", "play_seq")
+
+    # Field-position side in dim_games team codes when it maps onto one of the
+    # two teams in the game; otherwise PFR's raw code is kept.
+    mapped = pl.col("_side_raw").replace(_PFR_LOCATION_CODES)
+    df = df.with_columns(
+        pl.when((mapped == pl.col("home_team")) | (mapped == pl.col("away_team")) | pl.col("_side_raw").is_null())
+        .then(mapped)
+        .otherwise(pl.col("_side_raw"))
+        .alias("yardline_side")
+    )
+
+    parsed = pl.DataFrame(
+        [parse_detail(d) for d in df["detail"].to_list()],
+        schema={
+            "play_type": pl.Utf8, "two_point_attempt": pl.Boolean,
+            "yards_gained": pl.Int16, "touchdown": pl.Boolean,
+            **{c: pl.Utf8 for c in OUTPUT_COLUMNS[4:]},
+        },
+    )
+    df = pl.concat([df, parsed], how="horizontal")
+
+    # Some PFR descriptions are truncated before ", touchdown", so a play whose
+    # running score jumps by 6 for either team is also a touchdown.
+    prev_away = pl.col("away_score").forward_fill().shift(1).over("game_id").fill_null(0)
+    prev_home = pl.col("home_score").forward_fill().shift(1).over("game_id").fill_null(0)
+    df = df.with_columns(
+        (
+            pl.col("touchdown")
+            | ((pl.col("away_score") - prev_away) == 6).fill_null(False)
+            | ((pl.col("home_score") - prev_home) == 6).fill_null(False)
+        ).alias("touchdown")
+    )
+
+    return df.select([
+        "game_id", "play_seq", "season", "week", "game_type", "home_team", "away_team",
+        "quarter", pl.col("time").alias("clock"), "down", "ydstogo",
+        "yardline_side", "yardline", pl.col("location").alias("location_raw"),
+        "away_score", "home_score",
+        pl.col("detail").alias("description"),
+        "exp_pts_before", "exp_pts_after",
+        *OUTPUT_COLUMNS,
+        "boxscore_url",
+    ])
+
+
 _SPECIFIC_CLEANERS = {
     "schedules": _clean_schedules,
     "players": _clean_players,
@@ -326,6 +405,7 @@ _SPECIFIC_CLEANERS = {
     "pbp": _clean_pbp,
     "historical_gamelogs": _clean_historical_gamelogs,
     "historical_scoring": _clean_historical_scoring,
+    "historical_pbp": _clean_historical_pbp,
     "nfl_elo": _clean_elo,
 }
 

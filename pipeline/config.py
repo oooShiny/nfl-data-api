@@ -54,7 +54,10 @@ EXTERNAL_SCORING_DIR = next(
     Path("/Volumes/16tbArchive/nfl-data/game_scoring"),
 )
 SCORING_MAX_SEASON = 1998
-LOCAL_TAGS = ["historical_gamelogs", "historical_scoring", "nfl_elo"]
+# Per-game play-by-play CSVs written by scripts/scrape-pfr-pbp.mjs (gitignored);
+# complete seasons are imported into committed bronze parquet.
+SCRAPED_PBP_DIR = DATA_DIR / "scraped" / "pfr_pbp"
+LOCAL_TAGS = ["historical_gamelogs", "historical_scoring", "historical_pbp", "nfl_elo"]
 
 # FiveThirtyEight game-by-game Elo/QB-Elo ratings, 1920-2022. The original
 # projects.fivethirtyeight.com host was decommissioned (ABC News/Disney shut

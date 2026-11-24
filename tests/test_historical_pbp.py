@@ -1,0 +1,99 @@
+import duckdb
+import polars as pl
+import pytest
+from fastapi import HTTPException
+
+from api.routers.games import list_historical_plays
+from pipeline.gold import loader
+from pipeline.gold.schema import SCHEMA_SQL
+from pipeline.silver.cleaners import clean_dataset
+from pipeline.silver.pfr_pbp_parser import parse_detail
+
+
+@pytest.mark.parametrize("detail, expected", [
+    ("Jamal Anderson middle for 3 yards (tackle by Sean Gilbert)",
+     {"play_type": "run", "rusher": "Jamal Anderson", "yards_gained": 3, "tackler_1": "Sean Gilbert"}),
+    ("Jamal Anderson right tackle for -3 yards (tackle by Kevin Greene)",
+     {"play_type": "run", "yards_gained": -3}),
+    ("Kerry Collins pass complete to Mark Carrier for 22 yards (tackle by Eugene Robinson)",
+     {"play_type": "pass", "passer": "Kerry Collins", "receiver": "Mark Carrier", "yards_gained": 22}),
+    ("Kerry Collins pass incomplete intended for Muhsin Muhammad",
+     {"play_type": "pass", "passer": "Kerry Collins", "receiver": "Muhsin Muhammad", "yards_gained": None}),
+    ("Tony Banks sacked by Jared Tomich for 9 yards",
+     {"play_type": "pass", "passer": "Tony Banks", "sacker": "Jared Tomich", "yards_gained": -9}),
+    ("Curtis Conway 4 yard pass from Erik Kramer",  # unrecognized pass phrasing: type only
+     {"play_type": "pass", "passer": None}),
+    ("Tom Rouen aborted snap", {"play_type": "other", "rusher": None}),
+    ("Kerry Collins spiked the ball", {"play_type": "qb_spike", "passer": "Kerry Collins"}),
+    ("John Kasay kicks off 71 yards, returned by Tim Dwight for 19 yards",
+     {"play_type": "kickoff", "kicker": "John Kasay", "returner": "Tim Dwight"}),
+    ("Jason Elam 63 yard field goal good", {"play_type": "field_goal", "kicker": "Jason Elam"}),
+    ("Penalty on Bob Whitfield: False Start, 4 yards (accepted)",
+     {"play_type": "no_play", "penalized_player": "Bob Whitfield"}),
+    ("Terrell Davis left end for 12 yards, touchdown",
+     {"play_type": "run", "touchdown": True, "yards_gained": 12}),
+    ("Two Point Attempt: Terrell Davis right guard for 2 yards, touchdown",
+     {"play_type": "run", "two_point_attempt": True, "touchdown": False}),
+    ("Falcons won the coin toss, Falcons to receive the opening kickoff.", {"play_type": None}),
+    (None, {"play_type": None, "touchdown": False}),
+])
+def test_parse_detail(detail, expected):
+    out = parse_detail(detail)
+    for key, value in expected.items():
+        assert out[key] == value, key
+
+
+def _bronze_rows():
+    # All-string, as the bronze importer writes them.
+    base = dict(game_id="1998_01_NE_DEN", season="1998", week="1", game_type="REG",
+                home_team="DEN", away_team="NE",
+                boxscore_url="https://www.pro-football-reference.com/boxscores/199809070den.htm",
+                time="", down="", yds_to_go="", exp_pts_before="0.000", exp_pts_after="0.380")
+    return pl.DataFrame([
+        {**base, "play_seq": "1", "quarter": "1", "time": "15:00", "location": "DEN 30",
+         "away_score": "0", "home_score": "0", "detail": "Jason Elam kicks off 70 yards"},
+        {**base, "play_seq": "2", "quarter": "1", "down": "1", "yds_to_go": "10", "location": "NWE 25",
+         "away_score": "0", "home_score": "0", "detail": "Drew Bledsoe pass complete to Ben Coates for 8 yards"},
+        # Description truncated before ", touchdown": the score jump marks it.
+        {**base, "play_seq": "3", "quarter": "OT", "location": "",
+         "away_score": "0", "home_score": "6", "detail": "Drew Bledsoe fumbles, recovered by Bill Romanowski at"},
+    ])
+
+
+def test_clean_historical_pbp(tmp_path):
+    src = tmp_path / "1998.parquet"
+    _bronze_rows().write_parquet(src)
+
+    df = clean_dataset("historical_pbp", src)
+
+    assert df["quarter"].to_list() == [1, 1, 5]
+    assert df["yardline_side"].to_list() == ["DEN", "NE", None]  # NWE -> NE
+    assert df["yardline"].to_list() == [30, 25, None]
+    assert df["play_type"].to_list() == ["kickoff", "pass", "other"]
+    assert df["touchdown"].to_list() == [False, False, True]
+    assert df["clock"].to_list() == ["15:00", None, None]
+    assert df.schema["exp_pts_after"] == pl.Float64
+
+
+def test_load_fact_historical_plays_and_endpoint(tmp_path, monkeypatch):
+    silver = tmp_path / "silver"
+    (silver / "historical_pbp").mkdir(parents=True)
+    src = tmp_path / "1998.parquet"
+    _bronze_rows().write_parquet(src)
+    clean_dataset("historical_pbp", src).write_parquet(silver / "historical_pbp" / "1998.parquet")
+    monkeypatch.setattr(loader, "SILVER_DIR", silver)
+
+    con = duckdb.connect()
+    con.execute(SCHEMA_SQL)
+    loader.load_fact_historical_plays(con)
+
+    rows = con.execute("SELECT play_seq, play_type, passer, touchdown FROM fact_historical_plays ORDER BY 1").fetchall()
+    assert rows == [(1, "kickoff", None, False), (2, "pass", "Drew Bledsoe", False), (3, "other", None, True)]
+
+    out = list_historical_plays(None, season=1998, team="NE", play_type="pass", limit=50, offset=0, db=con,
+                                game_id=None, week=None)
+    assert out.total == 1 and out.data[0]["receiver"] == "Ben Coates"
+    with pytest.raises(HTTPException):
+        list_historical_plays(None, game_id=None, season=None, week=None, team=None, play_type=None,
+                              limit=50, offset=0, db=con)
+    con.close()

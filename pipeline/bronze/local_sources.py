@@ -18,6 +18,7 @@ from pipeline.config import (
     EXTERNAL_SCORING_DIR,
     NFL_ELO_URL,
     SCORING_MAX_SEASON,
+    SCRAPED_PBP_DIR,
 )
 
 console = Console()
@@ -90,6 +91,48 @@ def import_scoring(force: bool = False) -> int:
     return written
 
 
+def import_historical_pbp(force: bool = False) -> int:
+    """Combine scraped per-game PFR play-by-play CSVs into bronze parquet, one per season.
+
+    A season is imported only once every game in its gamelog has been scraped
+    (a <game_id>.csv, or a .none marker for games PFR has no play-by-play for),
+    and re-imported when any of its CSVs is newer than the parquet.
+    """
+    if not SCRAPED_PBP_DIR.exists():
+        console.print("  [dim]historical_pbp: no scraped play-by-play, skipping[/dim]")
+        return 0
+
+    dst_dir = BRONZE_DIR / "historical_pbp"
+    dst_dir.mkdir(parents=True, exist_ok=True)
+
+    written = 0
+    for season_dir in sorted(p for p in SCRAPED_PBP_DIR.iterdir() if p.is_dir() and p.name.isdigit()):
+        season = season_dir.name
+        gamelog = BRONZE_DIR / "historical_gamelogs" / f"{season}.parquet"
+        if not gamelog.exists():
+            continue
+        csvs = sorted(season_dir.glob("*.csv"))
+        scraped = len(csvs) + len(list(season_dir.glob("*.none")))
+        expected = pl.scan_parquet(gamelog).select(pl.len()).collect().item()
+        if scraped < expected:
+            console.print(f"  [dim]historical_pbp: {season} incomplete ({scraped}/{expected} games), skipping[/dim]")
+            continue
+        if not csvs:
+            continue
+        dst = dst_dir / f"{season}.parquet"
+        newest = max(p.stat().st_mtime for p in csvs)
+        if not force and dst.exists() and dst.stat().st_mtime >= newest:
+            continue
+        # All-string read keeps the schema identical across seasons; silver casts.
+        df = pl.concat([pl.read_csv(p, infer_schema_length=0) for p in csvs], how="vertical_relaxed")
+        df.write_parquet(dst, compression="zstd")
+        written += 1
+
+    if written:
+        console.print(f"  [green]✓[/green] historical_pbp: {written} season files imported")
+    return written
+
+
 def import_elo(force: bool = False) -> int:
     """Download FiveThirtyEight's game-by-game Elo ratings (1920-2022) into bronze."""
     dst_dir = BRONZE_DIR / "nfl_elo"
@@ -111,6 +154,7 @@ def import_local_sources(force: bool = False) -> dict[str, int]:
     results = {
         "historical_gamelogs": import_gamelogs(force=force),
         "historical_scoring": import_scoring(force=force),
+        "historical_pbp": import_historical_pbp(force=force),
         "nfl_elo": import_elo(force=force),
     }
     total = sum(results.values())

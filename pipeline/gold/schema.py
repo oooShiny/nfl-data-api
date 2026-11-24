@@ -116,6 +116,54 @@ CREATE TABLE IF NOT EXISTS fact_game_scoring (
     PRIMARY KEY (game_id, play_seq)
 );
 
+-- Full play-by-play for pre-1999 games, scraped from Pro-Football-Reference
+-- boxscores (scripts/scrape-pfr-pbp.mjs). Not the same shape as fact_plays:
+-- PFR gives only prose descriptions, so play_type, yards_gained, touchdown and
+-- the player-role columns are parsed from `description` (free-text names, not
+-- gsis_ids), and there is no possession team. exp_pts_* are PFR's own
+-- expected-points values, not nflfastR's.
+CREATE TABLE IF NOT EXISTS fact_historical_plays (
+    game_id                 VARCHAR,
+    play_seq                INTEGER,      -- order within the game, from 1
+    season                  SMALLINT,
+    week                    SMALLINT,
+    game_type               VARCHAR,
+    home_team               VARCHAR,      -- dim_games codes (historical: OAK, STL, ...)
+    away_team               VARCHAR,
+    quarter                 SMALLINT,     -- 5 = overtime
+    clock                   VARCHAR,      -- 'MM:SS' left in quarter; often NULL in source
+    down                    SMALLINT,
+    ydstogo                 SMALLINT,
+    yardline_side           VARCHAR,      -- whose side of the field the ball is on
+    yardline                SMALLINT,     -- 1-50 from that side's goal line
+    location_raw            VARCHAR,      -- PFR's original, e.g. 'NWE 35'
+    away_score              SMALLINT,     -- running score after the play
+    home_score              SMALLINT,
+    description             VARCHAR,
+    exp_pts_before          DOUBLE,
+    exp_pts_after           DOUBLE,
+    play_type               VARCHAR,      -- pass, run, punt, kickoff, field_goal, extra_point,
+                                          -- qb_kneel, qb_spike, no_play, other; NULL for coin toss etc.
+    two_point_attempt       BOOLEAN,
+    yards_gained            SMALLINT,     -- pass/run/sack/kneel plays only
+    touchdown               BOOLEAN,
+    passer                  VARCHAR,
+    rusher                  VARCHAR,
+    receiver                VARCHAR,
+    interceptor             VARCHAR,
+    sacker                  VARCHAR,
+    kicker                  VARCHAR,
+    punter                  VARCHAR,
+    returner                VARCHAR,
+    tackler_1               VARCHAR,
+    tackler_2               VARCHAR,
+    forced_fumble_player    VARCHAR,
+    fumble_recovery_player  VARCHAR,
+    penalized_player        VARCHAR,
+    boxscore_url            VARCHAR,
+    PRIMARY KEY (game_id, play_seq)
+);
+
 -- ─────────────────────────────────────────────
 -- Fact tables
 -- ─────────────────────────────────────────────
