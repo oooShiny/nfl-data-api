@@ -395,7 +395,7 @@ def _clean_historical_pbp(df: pl.DataFrame) -> pl.DataFrame:
         ).alias("touchdown")
     )
 
-    return df.select([
+    df = df.select([
         "game_id", "play_seq", "season", "week", "game_type", "home_team", "away_team",
         "quarter", pl.col("time").alias("clock"), "down", "ydstogo",
         "yardline_side", "yardline", pl.col("location").alias("location_raw"),
@@ -405,6 +405,9 @@ def _clean_historical_pbp(df: pl.DataFrame) -> pl.DataFrame:
         *OUTPUT_COLUMNS,
         "boxscore_url",
     ])
+    from pipeline.silver.pfr_possession import infer_possession
+
+    return infer_possession(df)
 
 
 _SPECIFIC_CLEANERS = {

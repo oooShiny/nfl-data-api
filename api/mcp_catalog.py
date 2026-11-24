@@ -99,7 +99,7 @@ TABLES: dict[str, dict[str, str]] = {
     "fact_historical_plays": {
         "description": "Full play-by-play for pre-1999 games from Pro-Football-Reference: down, distance, field position, running score, description, PFR expected points, plus play_type/yards_gained/touchdown and player names parsed from the description.",
         "coverage": "Pre-1999, back-filled one season at a time from 1998 backward; check SELECT DISTINCT season. Use fact_plays for 1999+.",
-        "notes": "Key is (game_id, play_seq). Player columns (passer, rusher, receiver, ...) are free-text names, not gsis_ids. No possession team column. quarter 5 = overtime. clock is often NULL in the source. Team codes match dim_games historical codes.",
+        "notes": "Key is (game_id, play_seq). Player columns (passer, rusher, receiver, ...) are free-text names, not gsis_ids. posteam/defteam are inferred (PFR has no possession column) from PFR's expected points, scores and field position; about 99.6% of plays are assigned, with posteam = receiving team on kickoffs and kicking team on punts/FG/XP, as in fact_plays. yardline_100 is distance to the opponent's goal line. quarter 5 = overtime. clock is often NULL in the source. Team codes match dim_games historical codes.",
     },
     # --- player stats ---
     "fact_player_game_stats": {
