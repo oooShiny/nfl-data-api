@@ -10,6 +10,8 @@ from rich.console import Console
 
 from pipeline.config import SILVER_DIR, GOLD_DB
 from pipeline.gold.schema import SCHEMA_SQL
+from pipeline.historical_players import NAME_COLUMNS as HISTORICAL_NAME_COLUMNS
+from pipeline.historical_players import match_player_ids
 from pipeline.scoring_text import (
     FIELDS as SCORING_FIELDS,
     NFLVERSE_FIELDS,
@@ -1741,8 +1743,10 @@ def load_fact_historical_plays(con: duckdb.DuckDBPyConnection) -> None:
         console.print("  [yellow]fact_historical_plays: no silver files found[/yellow]")
         return
     glob = str(SILVER_DIR / "historical_pbp" / "*.parquet")
-    cols = [r[0] for r in con.execute("SELECT column_name FROM information_schema.columns "
-                                      "WHERE table_name = 'fact_historical_plays' ORDER BY ordinal_position").fetchall()]
+    table_cols = [r[0] for r in con.execute("SELECT column_name FROM information_schema.columns "
+                                            "WHERE table_name = 'fact_historical_plays' ORDER BY ordinal_position").fetchall()]
+    silver_cols = {r[0] for r in con.execute(f"DESCRIBE SELECT * FROM read_parquet('{glob}', union_by_name=true)").fetchall()}
+    cols = [c for c in table_cols if c in silver_cols]
     con.execute("DELETE FROM fact_historical_plays")
     con.execute(f"""
         INSERT INTO fact_historical_plays ({", ".join(cols)})
@@ -1752,6 +1756,34 @@ def load_fact_historical_plays(con: duckdb.DuckDBPyConnection) -> None:
     """)
     n = con.execute("SELECT COUNT(*) FROM fact_historical_plays").fetchone()[0]
     console.print(f"  [green]✓[/green] fact_historical_plays: {n:,} rows")
+    _match_historical_player_ids(con)
+
+
+def _match_historical_player_ids(con: duckdb.DuckDBPyConnection) -> None:
+    """Fill the *_id columns of fact_historical_plays from fact_rosters (needs fact_rosters loaded)."""
+    if con.execute("SELECT COUNT(*) FROM fact_rosters WHERE season <= 1998").fetchone()[0] == 0:
+        console.print("  [yellow]fact_historical_plays: fact_rosters empty, player ids not matched[/yellow]")
+        return
+    cols = ", ".join(HISTORICAL_NAME_COLUMNS)
+    names = con.execute(f"""
+        SELECT DISTINCT season, home_team, away_team, name
+        FROM (UNPIVOT (SELECT season, home_team, away_team, {cols} FROM fact_historical_plays)
+              ON {cols} INTO NAME role VALUE name)
+    """).pl()
+    rosters = con.execute(
+        "SELECT season, team, player_name, player_id FROM fact_rosters WHERE season <= 1998").pl()
+    matched = match_player_ids(names, rosters).filter(pl.col("player_id").is_not_null())
+    con.register("_hist_ids", matched)
+    for c in HISTORICAL_NAME_COLUMNS:
+        con.execute(f"""
+            UPDATE fact_historical_plays p SET {c}_id = m.player_id
+            FROM _hist_ids m
+            WHERE m.season = p.season AND m.home_team = p.home_team AND m.away_team = p.away_team
+              AND m.name = p.{c}
+        """)
+    con.unregister("_hist_ids")
+    console.print(f"  [green]✓[/green] fact_historical_plays: player ids for {len(matched):,} of "
+                  f"{len(names):,} game/name pairs")
 
 
 # ── Name resolution back-fill ────────────────────────────────────────────────
@@ -1786,7 +1818,6 @@ LOADERS = [
     ("dim_players", load_dim_players),
     ("dim_games", load_dim_games),
     ("dim_games (historical)", load_historical_games),
-    ("fact_historical_plays", load_fact_historical_plays),
     ("fact_player_game_stats", load_fact_player_game_stats),
     ("fact_player_season_stats", load_fact_player_season_stats),
     ("fact_ngs_passing", load_fact_ngs_passing),
@@ -1802,6 +1833,8 @@ LOADERS = [
     ("fact_ftn_charting", load_fact_ftn_charting),
     ("fact_pbp_participation", load_fact_pbp_participation),
     ("fact_rosters", load_fact_rosters),
+    # After fact_rosters: player names are matched to gsis_ids through rosters.
+    ("fact_historical_plays", load_fact_historical_plays),
     ("fact_weekly_rosters", load_fact_weekly_rosters),
     ("fact_snap_counts", load_fact_snap_counts),
     ("fact_depth_charts", load_fact_depth_charts),

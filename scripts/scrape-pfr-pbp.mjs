@@ -172,6 +172,12 @@ async function main() {
         // Guard against a partially loaded table: the last score shown must
         // match the game's final score from our gamelogs.
         const last = [...rows].reverse().find((r) => r.pbp_score_aw && r.pbp_score_hm);
+        // Super Bowls are at neutral sites, and PFR sometimes lists the teams
+        // the other way round from our gamelogs. Put the scores in our order.
+        if (last && g.game_type === 'SB' && g.away_score !== g.home_score &&
+            Number(last.pbp_score_aw) === g.home_score && Number(last.pbp_score_hm) === g.away_score) {
+          for (const r of rows) [r.pbp_score_aw, r.pbp_score_hm] = [r.pbp_score_hm, r.pbp_score_aw];
+        }
         if (!last || Number(last.pbp_score_aw) !== g.away_score || Number(last.pbp_score_hm) !== g.home_score) {
           throw new Error(
             `final score mismatch: pbp ${last ? `${last.pbp_score_aw}-${last.pbp_score_hm}` : 'none'}, ` +

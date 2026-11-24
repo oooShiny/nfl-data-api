@@ -155,10 +155,12 @@ ALTER TABLE fact_game_scoring ADD COLUMN IF NOT EXISTS play_description VARCHAR;
 -- Full play-by-play for pre-1999 games, scraped from Pro-Football-Reference
 -- boxscores (scripts/scrape-pfr-pbp.mjs). Not the same shape as fact_plays:
 -- PFR gives only prose descriptions, so play_type, yards_gained, touchdown and
--- the player-role columns are parsed from `description` (free-text names, not
--- gsis_ids). PFR has no possession column: posteam/defteam are inferred
--- from PFR's expected-points values, scores and field position
--- (pipeline/silver/pfr_possession.py). exp_pts_* are PFR's own
+-- the player-role columns are parsed from `description` (free-text names).
+-- Each name column has a matching *_id (gsis_id), matched by name against
+-- nflverse rosters for the two teams that season (pipeline/historical_players.py);
+-- NULL when no single player matches. PFR has no possession column:
+-- posteam/defteam are inferred from PFR's expected-points values, scores and
+-- field position, and drives follow from them (pipeline/silver/pfr_possession.py). exp_pts_* are PFR's own
 -- expected-points values, not nflfastR's.
 CREATE TABLE IF NOT EXISTS fact_historical_plays (
     game_id                 VARCHAR,
@@ -171,6 +173,7 @@ CREATE TABLE IF NOT EXISTS fact_historical_plays (
     posteam                 VARCHAR,      -- inferred: offense; kicking team on punts/FG/XP,
                                           -- receiving team on kickoffs (as in fact_plays)
     defteam                 VARCHAR,
+    drive                   SMALLINT,     -- from 1 within the game; follows posteam
     quarter                 SMALLINT,     -- 5 = overtime
     clock                   VARCHAR,      -- 'MM:SS' left in quarter; often NULL in source
     down                    SMALLINT,
@@ -190,18 +193,31 @@ CREATE TABLE IF NOT EXISTS fact_historical_plays (
     yards_gained            SMALLINT,     -- pass/run/sack/kneel plays only
     touchdown               BOOLEAN,
     passer                  VARCHAR,
+    passer_id               VARCHAR,
     rusher                  VARCHAR,
+    rusher_id               VARCHAR,
     receiver                VARCHAR,
+    receiver_id             VARCHAR,
     interceptor             VARCHAR,
+    interceptor_id          VARCHAR,
     sacker                  VARCHAR,
+    sacker_id               VARCHAR,
     kicker                  VARCHAR,
+    kicker_id               VARCHAR,
     punter                  VARCHAR,
+    punter_id               VARCHAR,
     returner                VARCHAR,
+    returner_id             VARCHAR,
     tackler_1               VARCHAR,
+    tackler_1_id            VARCHAR,
     tackler_2               VARCHAR,
+    tackler_2_id            VARCHAR,
     forced_fumble_player    VARCHAR,
+    forced_fumble_player_id VARCHAR,
     fumble_recovery_player  VARCHAR,
+    fumble_recovery_player_id VARCHAR,
     penalized_player        VARCHAR,
+    penalized_player_id     VARCHAR,
     boxscore_url            VARCHAR,
     PRIMARY KEY (game_id, play_seq)
 );
@@ -209,6 +225,20 @@ CREATE TABLE IF NOT EXISTS fact_historical_plays (
 ALTER TABLE fact_historical_plays ADD COLUMN IF NOT EXISTS posteam VARCHAR;
 ALTER TABLE fact_historical_plays ADD COLUMN IF NOT EXISTS defteam VARCHAR;
 ALTER TABLE fact_historical_plays ADD COLUMN IF NOT EXISTS yardline_100 SMALLINT;
+ALTER TABLE fact_historical_plays ADD COLUMN IF NOT EXISTS drive SMALLINT;
+ALTER TABLE fact_historical_plays ADD COLUMN IF NOT EXISTS passer_id VARCHAR;
+ALTER TABLE fact_historical_plays ADD COLUMN IF NOT EXISTS rusher_id VARCHAR;
+ALTER TABLE fact_historical_plays ADD COLUMN IF NOT EXISTS receiver_id VARCHAR;
+ALTER TABLE fact_historical_plays ADD COLUMN IF NOT EXISTS interceptor_id VARCHAR;
+ALTER TABLE fact_historical_plays ADD COLUMN IF NOT EXISTS sacker_id VARCHAR;
+ALTER TABLE fact_historical_plays ADD COLUMN IF NOT EXISTS kicker_id VARCHAR;
+ALTER TABLE fact_historical_plays ADD COLUMN IF NOT EXISTS punter_id VARCHAR;
+ALTER TABLE fact_historical_plays ADD COLUMN IF NOT EXISTS returner_id VARCHAR;
+ALTER TABLE fact_historical_plays ADD COLUMN IF NOT EXISTS tackler_1_id VARCHAR;
+ALTER TABLE fact_historical_plays ADD COLUMN IF NOT EXISTS tackler_2_id VARCHAR;
+ALTER TABLE fact_historical_plays ADD COLUMN IF NOT EXISTS forced_fumble_player_id VARCHAR;
+ALTER TABLE fact_historical_plays ADD COLUMN IF NOT EXISTS fumble_recovery_player_id VARCHAR;
+ALTER TABLE fact_historical_plays ADD COLUMN IF NOT EXISTS penalized_player_id VARCHAR;
 
 
 -- ─────────────────────────────────────────────

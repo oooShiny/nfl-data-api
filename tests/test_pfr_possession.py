@@ -1,10 +1,10 @@
 import polars as pl
 
-from pipeline.silver.pfr_possession import infer_possession
+from pipeline.silver.pfr_possession import _number_drives, infer_possession
 
 
 def _play(seq, play_type, before, after, h, a, side=None, yl=None, down=None, **kw):
-    row = dict(game_id="1998_01_NE_DEN", play_seq=seq, home_team="DEN", away_team="NE", play_type=play_type,
+    row = dict(game_id="1998_01_NE_DEN", play_seq=seq, quarter=1, home_team="DEN", away_team="NE", play_type=play_type,
                exp_pts_before=before, exp_pts_after=after, home_score=h, away_score=a,
                yardline_side=side, yardline=yl, down=down, two_point_attempt=False, touchdown=False,
                passer=None, rusher=None, receiver=None, punter=None, kicker=None)
@@ -33,6 +33,8 @@ def test_infer_possession_from_expected_points():
     assert out["defteam"].to_list()[:2] == ["NE", "NE"]
     # yardline_100 from the offense's view: DEN at its own 18 is 82 from the goal.
     assert out["yardline_100"].to_list()[1:4] == [82, 38, 34]
+    # A drive per possession; each kickoff starts the receiving team's drive.
+    assert out["drive"].to_list() == [1, 1, 1, 1, 2, 2, 2, 2, 2, 3]
 
 
 def test_score_anchor_overrides_field_position():
@@ -44,3 +46,22 @@ def test_score_anchor_overrides_field_position():
     ])
     out = infer_possession(df)
     assert out["posteam"].to_list() == ["DEN", "NE"]
+
+
+def test_drives_break_at_half_and_carry_over_unassigned_plays():
+    rows = [
+        # (quarter, posteam, play_type)
+        (1, None, None),           # coin toss: takes the first drive
+        (1, "DEN", "kickoff"),
+        (1, "DEN", "run"),
+        (1, None, "no_play"),      # timeout: same drive
+        (2, "DEN", "pass"),        # quarter change within a half: same drive
+        (2, "DEN", "extra_point"),
+        (2, "NE", "kickoff"),
+        (2, "NE", "run"),
+        (3, "NE", "run"),          # second half: new drive, same team
+        (5, "NE", "pass"),         # overtime: new drive
+    ]
+    df = pl.DataFrame([dict(game_id="g", play_seq=i, quarter=q, posteam=t, play_type=pt)
+                       for i, (q, t, pt) in enumerate(rows, 1)])
+    assert _number_drives(df)["drive"].to_list() == [1, 1, 1, 1, 1, 1, 2, 2, 3, 4]
