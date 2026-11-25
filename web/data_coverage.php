@@ -343,10 +343,10 @@ require __DIR__ . '/includes/header.php';
                         <td>From nflverse, with EPA/WPA and structured player IDs. Starts in 1999, the first season nflverse covers.</td>
                     </tr>
                     <tr>
-                        <td>Historical play-by-play (Pro-Football-Reference)</td>
-                        <td><?= coverage_range($coverage, 'Historical play-by-play (PFR)') ?></td>
+                        <td>Historical play-by-play</td>
+                        <td><?= coverage_range($coverage, 'Historical play-by-play') ?></td>
                         <td class="text-right"><?= nf($rows['fact_historical_plays'] ?? null) ?></td>
-                        <td>Every play of pre-1999 games from PFR box scores: down &amp; distance, field position, running score, description, and PFR expected points. Play type, yards, touchdowns and player names are parsed from the description, and names are matched to player IDs through team rosters. PFR has no possession column, so the team with the ball, and from it the drive, is inferred from PFR&rsquo;s expected points, scores and field position (about 99.6% of plays). Being filled in one season at a time, working back from 1998. <code>GET /v1/games/historical-plays</code>.</td>
+                        <td>Every play of pre-1999 games from box scores: down &amp; distance, field position, running score, description, and expected points. Play type, yards, touchdowns and player names are parsed from the description, and names are matched to player IDs through team rosters. <code>GET /v1/games/historical-plays</code>.</td>
                     </tr>
                     <tr>
                         <td>Pass / rush / kick play splits</td>
