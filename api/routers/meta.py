@@ -71,7 +71,7 @@ COVERAGE_ROWS: list[tuple[str, str, str]] = [
      "SELECT season, count(*) FROM ref_officials GROUP BY 1"),
     ("Play-by-Play", "Play-by-play (EPA/WPA)",
      "SELECT season, count(*) FROM fact_plays GROUP BY 1"),
-    ("Play-by-Play", "Historical play-by-play (PFR)",
+    ("Play-by-Play", "Historical play-by-play",
      "SELECT season, count(*) FROM fact_historical_plays GROUP BY 1"),
     ("Play-by-Play", "Personnel & formations",
      "SELECT TRY_CAST(split_part(game_id, '_', 1) AS INTEGER), count(*) FROM fact_pbp_participation GROUP BY 1"),
