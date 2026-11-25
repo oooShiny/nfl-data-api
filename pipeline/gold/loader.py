@@ -449,8 +449,23 @@ def load_fact_rosters(con: duckdb.DuckDBPyConnection) -> None:
         return
     # Rebuilt from every season's file, so rows whose team code changed don't linger.
     con.execute("DELETE FROM fact_rosters")
+    # Many older roster rows have no gsis_id. Give them, in order:
+    #   1. dim_players' id for the one player with the same name and birth date
+    #      (so a player search finds their stats),
+    #   2. a placeholder from name + birth date, the same for every team and
+    #      season the player was on,
+    #   3. without a birth date, a placeholder per name, team and season.
     con.execute(f"""
         INSERT OR REPLACE INTO fact_rosters
+        WITH r AS (
+            SELECT * FROM read_parquet('{glob}', hive_partitioning=false, union_by_name=true)
+            WHERE team IS NOT NULL AND full_name IS NOT NULL
+        ),
+        known AS (
+            SELECT lower(display_name) AS name, birth_date, any_value(gsis_id) AS gsis_id
+            FROM dim_players WHERE birth_date IS NOT NULL AND display_name IS NOT NULL
+            GROUP BY 1, 2 HAVING count(DISTINCT gsis_id) = 1
+        )
         SELECT
             season::SMALLINT,
             team,
@@ -459,18 +474,22 @@ def load_fact_rosters(con: duckdb.DuckDBPyConnection) -> None:
             jersey_number::SMALLINT,
             status,
             full_name               AS player_name,
-            COALESCE(gsis_id, 'hist_' || md5(concat(full_name, '|', team, '|', season::VARCHAR))) AS player_id,
-            birth_date,
+            COALESCE(r.gsis_id::VARCHAR, known.gsis_id,
+                     CASE WHEN r.birth_date IS NOT NULL
+                          THEN 'hist_' || md5(concat(full_name, '|', r.birth_date::VARCHAR)) END,
+                     'hist_' || md5(concat(full_name, '|', team, '|', season::VARCHAR))) AS player_id,
+            r.birth_date,
             height,
             weight::SMALLINT,
             college,
             years_exp::SMALLINT,
             entry_year::SMALLINT,
             rookie_year::SMALLINT,
-            draft_club,
+            r.draft_club,
             draft_number::SMALLINT
-        FROM read_parquet('{glob}', hive_partitioning=false, union_by_name=true)
-        WHERE team IS NOT NULL AND full_name IS NOT NULL
+        FROM r
+        LEFT JOIN known ON r.gsis_id IS NULL AND known.name = lower(r.full_name)
+                       AND known.birth_date = r.birth_date
     """)
     n = con.execute("SELECT COUNT(*) FROM fact_rosters").fetchone()[0]
     console.print(f"  [green]✓[/green] fact_rosters: {n:,} rows")

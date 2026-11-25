@@ -139,7 +139,7 @@ Sourced from [nflverse-data](https://github.com/nflverse/nflverse-data) public r
 | `fact_pass_plays` | 524K | Pass-specific detail: passer/receiver, air yards, YAC, completion, CPOE |
 | `fact_rush_plays` | 385K | Rush-specific detail: rusher, run location/gap, TDs |
 | `fact_kick_plays` | 314K | Punts, field goals, extra points, kickoffs, returns |
-| `fact_historical_plays` | 128K | Pre-1999 play-by-play from Pro-Football-Reference (1996–1998 so far, back-filled one season at a time): down/distance, field position, score, description, PFR expected points, play type/yards/TD/player names parsed from the description with gsis_ids matched through rosters, and the team with the ball and drive number (inferred) |
+| `fact_historical_plays` | 287K | Pre-1999 play-by-play from Pro-Football-Reference (1992–1998 so far, back-filled one season at a time): down/distance, field position, score, description, PFR expected points, play type/yards/TD/player names parsed from the description with gsis_ids matched through rosters, and the team with the ball and drive number (inferred) |
 | `fact_pbp_participation` | 486K | Personnel groupings, formations, pass rush/coverage detail per play (2016+) |
 | `fact_ftn_charting` | 185K | Play-design charting — motion, play-action, RPO, blitz, pressure, drops (2022+) |
 
@@ -152,8 +152,8 @@ Sourced from [nflverse-data](https://github.com/nflverse/nflverse-data) public r
 | `fact_player_game_stats` | 134K | Weekly passing/rushing/receiving box-score stats, advanced metrics (EPA, PACR, DAKOTA, RACR, target/air-yards share, WOPR), fantasy points |
 | `fact_player_season_stats` | 12K | Season-total player stats — adds defense, special teams, and kicking to the weekly stats above |
 | `ref_team_stats` | 1.5K | Season-total team offense/defense box scores (REG, POST, and REG+POST) |
-| `fact_historical_player_season_stats` | 2K | Pre-1999 player passing/rushing/receiving season totals summed from `fact_historical_plays` (`source = 'pfr_pbp'`), checked against PFR's official season tables |
-| `fact_historical_team_season_stats` | 126 | Pre-1999 team passing/rushing season totals, same source |
+| `fact_historical_player_season_stats` | 4.6K | Pre-1999 player passing/rushing/receiving season totals summed from `fact_historical_plays` (`source = 'pfr_pbp'`), checked against PFR's official season tables |
+| `fact_historical_team_season_stats` | 288 | Pre-1999 team passing/rushing season totals, same source |
 | `fact_snap_counts` | 325K | Offense/defense/special-teams snap counts and percentages per player per game |
 | `fact_ngs_passing` | 5.9K | NFL Next Gen Stats — time to throw, air yards, CPOE (2016+) |
 | `fact_ngs_receiving` | 15K | NFL Next Gen Stats — separation, cushion, YAC over expected (2016+) |
@@ -170,7 +170,7 @@ Sourced from [nflverse-data](https://github.com/nflverse/nflverse-data) public r
 | Table | Rows | Contents |
 |---|---|---|
 | `fact_weekly_rosters` | 889K | Weekly roster status, position, jersey number, experience |
-| `fact_rosters` | 143K | Season-level roster snapshots, 1920-present (pre-1974 players use synthetic `hist_*` IDs, not joinable to `dim_players`) |
+| `fact_rosters` | 143K | Season-level roster snapshots, 1920-present (older players without a gsis_id use `dim_players`' ID when name + birth date match one player, else a synthetic `hist_*` ID, one per player) |
 | `fact_depth_charts` | 725K | Weekly depth chart position/order by team |
 | `fact_injuries` | 91K | Weekly injury reports (game and practice status, body part) |
 

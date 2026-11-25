@@ -123,18 +123,40 @@ const CSV_COLUMNS = [
 
 async function scrapeBoxscore(url) {
   await openAndSettle(url);
-  return evalJS(`({
-    // The scoring table is on every boxscore page; if it's missing the page
-    // didn't load properly, so an empty pbp table means nothing.
-    pageLoaded: !!document.querySelector('table#scoring'),
-    rows: Array.from(document.querySelectorAll('table#pbp tbody tr'))
-      .filter(r => !r.classList.contains('thead'))
-      .map(r => {
-        const c = {};
-        r.querySelectorAll('[data-stat]').forEach(e => c[e.getAttribute('data-stat')] = e.innerText.trim());
-        return c;
-      }),
-  })`);
+  return evalJS(`(() => {
+    // PFR ships some tables inside HTML comments and renders them after load,
+    // so on a slow page the pbp table may only exist as a comment: look there
+    // too.
+    let t = document.querySelector('table#pbp');
+    let inComment = false;
+    if (!t) {
+      const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_COMMENT);
+      for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+        if (n.textContent.includes('id="pbp"')) {
+          inComment = true;
+          const d = document.createElement('div');
+          d.innerHTML = n.textContent;
+          t = d.querySelector('table#pbp');
+          if (t) break;
+        }
+      }
+    }
+    return {
+      // The scoring table is on every boxscore page; if it's missing the page
+      // didn't load properly, so an empty pbp table means nothing.
+      pageLoaded: !!document.querySelector('table#scoring'),
+      // Any sign of a pbp table at all (element, comment, or section): then
+      // zero rows is a load problem, not a game without play-by-play.
+      pbpPresent: !!t || inComment || !!document.querySelector('#all_pbp, #div_pbp'),
+      rows: t ? Array.from(t.querySelectorAll('tbody tr'))
+        .filter(r => !r.classList.contains('thead'))
+        .map(r => {
+          const c = {};
+          r.querySelectorAll('[data-stat]').forEach(e => c[e.getAttribute('data-stat')] = (e.innerText || e.textContent).trim());
+          return c;
+        }) : [],
+    };
+  })()`);
 }
 
 function logFailure(g, season, err) {
@@ -163,8 +185,9 @@ async function main() {
     attempts++;
     process.stdout.write(`  [${ts()}] ${g.game_id}...`);
     try {
-      const { pageLoaded, rows } = await scrapeBoxscore(g.boxscore_url);
+      const { pageLoaded, pbpPresent, rows } = await scrapeBoxscore(g.boxscore_url);
       if (rows.length === 0 && !pageLoaded) throw new Error('page did not finish loading (no scoring table)');
+      if (rows.length === 0 && pbpPresent) throw new Error('pbp table present but empty (page not fully rendered)');
       if (rows.length === 0) {
         writeAtomic(path.join(dir, `${g.game_id}.none`), '');
         process.stdout.write(' no play-by-play\n');

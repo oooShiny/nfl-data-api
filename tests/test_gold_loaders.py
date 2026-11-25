@@ -133,3 +133,29 @@ def test_ref_team_stats_keeps_playoff_teams_in_reg(tmp_path, monkeypatch):
 
     rows = con.execute("SELECT team, season_type, attempts FROM ref_team_stats ORDER BY 1, 2").fetchall()
     assert rows == [("KC", "POST", 90), ("KC", "REG", 500), ("KC", "REG+POST", 590), ("NYG", "REG", 520)]
+
+
+def test_rosters_give_old_players_one_id(con):
+    c, silver = con
+    c.execute("INSERT INTO dim_players (gsis_id, display_name, birth_date) VALUES "
+              "('STE401115', 'John Stephens', DATE '1966-02-23')")
+    cols = ("season, team, position, depth_chart_position, jersey_number, status, full_name, "
+            "birth_date, height, weight, gsis_id")
+    _write(c, silver / "rosters" / "roster_1993.parquet", f"""
+        SELECT * FROM (VALUES
+          (1993, 'KC', 'RB', 'RB', 0, 'ACT', 'John Stephens', DATE '1966-02-23', 73, 220, NULL::VARCHAR),
+          (1993, 'GB', 'RB', 'RB', 0, 'TRC', 'John Stephens', DATE '1966-02-23', 73, 220, NULL),
+          (1993, 'GB', 'WR', 'WR', 0, 'ACT', 'Ed West',       DATE '1961-08-02', 73, 220, NULL),
+          (1993, 'KC', 'WR', 'WR', 0, 'ACT', 'Ed West',       DATE '1961-08-02', 73, 220, NULL),
+          (1993, 'NE', 'WR', 'WR', 0, 'ACT', 'No Birthday',   NULL,              73, 220, NULL)
+        ) t({cols}),
+        (SELECT NULL::VARCHAR AS college, NULL::INT AS years_exp, NULL::INT AS entry_year,
+                NULL::INT AS rookie_year, NULL::VARCHAR AS draft_club, NULL::INT AS draft_number)""")
+    loader.load_fact_rosters(c)
+    ids = c.execute("SELECT player_name, team, player_id FROM fact_rosters ORDER BY ALL").fetchall()
+    by = {(n, t): i for n, t, i in ids}
+    # In dim_players (name + birth date): its id on every team.
+    assert by[("John Stephens", "KC")] == by[("John Stephens", "GB")] == "STE401115"
+    # Not in dim_players: one placeholder across teams.
+    assert by[("Ed West", "GB")] == by[("Ed West", "KC")] and by[("Ed West", "GB")].startswith("hist_")
+    assert by[("No Birthday", "NE")].startswith("hist_")

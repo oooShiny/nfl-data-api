@@ -70,6 +70,11 @@ def _player_team(role: str) -> str:
                         HAVING count(DISTINCT r.team) = 1), _hist_off.team)"""
 
 
+def _same_player(cte: str) -> str:
+    return " AND ".join(f"g.{c} IS NOT DISTINCT FROM {cte}.{c}"
+                        for c in ("season", "season_type", "player_id", "player_name", "team"))
+
+
 PLAYER_SEASON_SQL = """
 INSERT INTO fact_historical_player_season_stats BY NAME
 WITH pass AS (
@@ -136,12 +141,15 @@ SELECT g.season::SMALLINT AS season, g.season_type, g.player_id, g.player_name,
        coalesce(rec.receiving_tds, 0)::INTEGER AS receiving_tds,
        'pfr_pbp' AS source
 FROM games g
-LEFT JOIN pass USING (season, season_type, player_id, player_name, team)
-LEFT JOIN rush USING (season, season_type, player_id, player_name, team)
-LEFT JOIN rec  USING (season, season_type, player_id, player_name, team)
+-- NULL-safe: players without a roster id, and plays with no inferred team,
+-- still need their stats joined.
+LEFT JOIN pass ON {on_pass}
+LEFT JOIN rush ON {on_rush}
+LEFT JOIN rec  ON {on_rec}
 ORDER BY season, season_type, team, player_name
 """.format(team_passer=_player_team("passer"), team_rusher=_player_team("rusher"),
-           team_receiver=_player_team("receiver"))
+           team_receiver=_player_team("receiver"),
+           on_pass=_same_player("pass"), on_rush=_same_player("rush"), on_rec=_same_player("rec"))
 
 TEAM_SEASON_SQL = """
 INSERT INTO fact_historical_team_season_stats BY NAME

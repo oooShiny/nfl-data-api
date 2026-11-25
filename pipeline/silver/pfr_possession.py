@@ -215,7 +215,7 @@ def infer_possession(df: pl.DataFrame, rosters: pl.DataFrame | None = None) -> p
     # Kickoffs are from the kicking team's view; nflverse's posteam is the receiver.
     posteam = pl.when(pl.col("_ep_team").is_null()).then(None) \
         .when(pl.col("play_type") == "kickoff").then(other).otherwise(pl.col("_ep_team"))
-    df = df.with_columns(posteam.alias("posteam"))
+    df = _fill_penalty_gaps(df.with_columns(posteam.alias("posteam")))
     df = df.with_columns(
         pl.when(pl.col("posteam").is_null()).then(None)
         .when(pl.col("posteam") == pl.col("home_team")).then(pl.col("away_team"))
@@ -230,6 +230,30 @@ def infer_possession(df: pl.DataFrame, rosters: pl.DataFrame | None = None) -> p
         .otherwise(pl.col("yardline")).cast(pl.Int16).alias("yardline_100"),
     )
     return _number_drives(df.drop("_ep_team"))
+
+
+def _fill_penalty_gaps(df: pl.DataFrame) -> pl.DataFrame:
+    """Give an unassigned no_play (a penalty before the snap, a nullified play)
+    the team that had the ball on the plays either side of it, when both are
+    the same team in the same half.
+
+    Penalty-only rows carry no player and often no expected points (PFR writes
+    0.0, and has none at all for 1993), so the solve can leave them
+    unassigned. Checked against seasons with expected points (1992, 1994-1996):
+    this agrees with the expected-points answer on 99.7-100% of plays.
+    """
+    half = pl.when(pl.col("quarter") <= 2).then(1).when(pl.col("quarter") <= 4).then(2).otherwise(pl.col("quarter"))
+    anchor = pl.when(pl.col("play_type") != "no_play").then(pl.col("posteam"))
+    df = df.with_columns(_half=half, _anchor=anchor)
+    by = ["game_id", "_half"]
+    df = df.with_columns(
+        _prv=pl.col("_anchor").forward_fill().shift(1).over(by),
+        _nxt=pl.col("_anchor").backward_fill().shift(-1).over(by),
+    )
+    fill = (pl.col("posteam").is_null() & (pl.col("play_type") == "no_play")
+            & (pl.col("_prv") == pl.col("_nxt"))).fill_null(False)
+    return df.with_columns(pl.when(fill).then(pl.col("_prv")).otherwise(pl.col("posteam")).alias("posteam")) \
+        .drop("_half", "_anchor", "_prv", "_nxt")
 
 
 def _number_drives(df: pl.DataFrame) -> pl.DataFrame:
