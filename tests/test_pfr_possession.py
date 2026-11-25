@@ -1,6 +1,6 @@
 import polars as pl
 
-from pipeline.silver.pfr_possession import _number_drives, infer_possession
+from pipeline.silver.pfr_possession import _fill_penalty_gaps, _number_drives, infer_possession
 
 
 def _play(seq, play_type, before, after, h, a, side=None, yl=None, down=None, **kw):
@@ -65,3 +65,23 @@ def test_drives_break_at_half_and_carry_over_unassigned_plays():
     df = pl.DataFrame([dict(game_id="g", play_seq=i, quarter=q, posteam=t, play_type=pt)
                        for i, (q, t, pt) in enumerate(rows, 1)])
     assert _number_drives(df)["drive"].to_list() == [1, 1, 1, 1, 1, 1, 2, 2, 3, 4]
+
+
+def test_penalty_gaps_take_the_team_on_both_sides():
+    rows = [
+        # (quarter, posteam, play_type)
+        (1, "DEN", "run"),
+        (1, None, "no_play"),      # false start between two DEN plays: DEN
+        (1, "DEN", "pass"),
+        (1, "DEN", "punt"),
+        (1, None, "no_play"),      # between DEN's punt and NE's run: unknown
+        (1, "NE", "run"),
+        (2, None, "no_play"),      # last play of the half: no team after it
+        (3, "NE", "run"),
+        (3, None, None),           # timeout (not a no_play): left alone
+        (3, "NE", "pass"),
+    ]
+    df = pl.DataFrame([dict(game_id="g", play_seq=i, quarter=q, posteam=t, play_type=pt)
+                       for i, (q, t, pt) in enumerate(rows, 1)])
+    assert _fill_penalty_gaps(df)["posteam"].to_list() == [
+        "DEN", "DEN", "DEN", "DEN", None, "NE", None, "NE", None, "NE"]

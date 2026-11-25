@@ -83,7 +83,12 @@ def main() -> int:
                   AND f.scoring_type = 'touchdown') AS scoring_tds,
                s.other,
                (SELECT count(*) FROM p WHERE p.season = s.season AND p.yardline_side IS NOT NULL
-                  AND p.yardline_side NOT IN (SELECT team FROM season_teams t WHERE t.season = s.season)) AS bad_side,
+                  -- PFR's own codes (RAM, GNB, ...) are real teams too: a raw code
+                  -- kept because it fits neither team in the game is a typo_side.
+                  AND coalesce(map_extract(MAP {'GNB':'GB','KAN':'KC','NOR':'NO','NWE':'NE','SDG':'SD','SFO':'SF',
+                                                'TAM':'TB','WAS':'WSH','RAM':'LA','PHO':'PHX'}, p.yardline_side)[1],
+                               p.yardline_side)
+                      NOT IN (SELECT team FROM season_teams t WHERE t.season = s.season)) AS bad_side,
                s.off_side, s.poss,
                (SELECT count(*) FILTER (WHERE ok) FROM pen WHERE pen.season = s.season) AS pen_ok,
                (SELECT count(*) FROM pen WHERE pen.season = s.season) AS pen_n

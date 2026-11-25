@@ -10,7 +10,7 @@ Regular season only (PFR's season pages are regular season). For each
 season and stat:
   - teams: teams whose derived total equals PFR's exactly, and the largest
     difference
-  - players: players (matched on PFR id -> gsis_id) whose derived total is
+  - players: players (matched on PFR id -> gsis_id, else on name) whose derived total is
     exact / within 2% (min 10 yards), and the league total both ways
 --detail lists the largest player differences.
 """
@@ -94,10 +94,22 @@ def main() -> int:
                                f"GROUP BY 1", [season]).pl()
             main_stat = stats[0][0] if page != "passing" else "attempts"
             pfr = pfr.filter(pl.col(main_stat) > 0)
+            # Older players can have a placeholder id in fact_rosters (hist_...)
+            # that dim_players doesn't share; match those on name, when the name
+            # is one player on both sides (two James Stewarts in 1995).
+            by_name = con.execute(f"SELECT player_name AS name, {cols} FROM fact_historical_player_season_stats "
+                                  f"WHERE season = ? AND season_type = 'REG' GROUP BY 1 "
+                                  f"HAVING count(DISTINCT player_id) <= 1", [season]).pl()
+            by_name = by_name.filter(~pl.col("name").is_in(
+                pfr.filter(pl.col("name").is_duplicated())["name"].implode()))
             j = pfr.join(ours, on="player_id", how="left", suffix="_ours")
-            unmatched = int(j["player_id"].is_null().sum())
-            print(f"  {page}: {len(pfr)} PFR players, {unmatched} without a gsis_id via pfr_id")
-            j = j.filter(pl.col("player_id").is_not_null())
+            id_hit = j[stats[0][0] + "_ours"].is_not_null()
+            j = pl.concat([
+                j.filter(id_hit),
+                j.filter(~id_hit).select(pfr.columns).join(by_name, on="name", how="left", suffix="_ours"),
+            ], how="diagonal_relaxed")
+            unmatched = int(j[stats[0][0] + "_ours"].is_null().sum())
+            print(f"  {page}: {len(pfr)} PFR players, {unmatched} with no derived row (by id or name)")
             for o, _ in stats:
                 a, b = j[o], j[o + "_ours"].fill_null(0)
                 diff = (a - b).abs()
