@@ -8,16 +8,6 @@ $meta = nfl_api_get_cached('/meta', [], 86400);
 $seasonCount = count($meta['seasons'] ?? []);
 $teamCount = count($meta['teams'] ?? []);
 
-$ticker_items = [
-    'PASS YDS: T.BRADY 89,216 (1999-PRESENT)',
-    'NORMALIZED: ONE SCHEMA, 1999-PRESENT',
-    'NO API KEY REQUIRED — JUST GET',
-    'PLAYS: 1,279,000+ SINCE 1999',
-    'FREE &amp; OPEN — API.NFLDATA.ORG/DOCS',
-    'GAMES: 19,900+ WITH BOX SCORES',
-    'STABLE IDS &middot; ISO DATES &middot; TYPED NUMBERS',
-];
-
 require __DIR__ . '/includes/header.php';
 ?>
 
@@ -222,7 +212,7 @@ require __DIR__ . '/includes/header.php';
             </div>
         </div>
         <div class="tape-panel">
-            <div class="tab-bar" style="padding: 7px 8px; background: linear-gradient(180deg, rgba(30,60,118,0.7), rgba(12,28,62,0.7)); border-bottom: 2px solid var(--border-primary);">
+            <div class="tab-bar">
                 <button type="button" class="tab-btn active" data-tab="curl">cURL</button>
                 <button type="button" class="tab-btn" data-tab="python">Python</button>
                 <button type="button" class="tab-btn" data-tab="js">JavaScript</button>
@@ -332,13 +322,9 @@ require __DIR__ . '/includes/header.php';
 </section>
 
 <!-- ===== FROM THE BOOTH ===== -->
-<section style="margin-top: 38px; margin-bottom: 38px;">
-    <div class="credit-panel glow">
-        <div class="credit-badge">
-            <span class="label-sm">From the</span>
-            <span class="label-lg">Booth</span>
-        </div>
-        <div class="credit-body">
+<section>
+    <div class="card">
+        <div class="card-content">
             <p>It's just me &mdash; and to be clear, I didn't compile any of this. Statisticians, archivists, and the open-source football community spent years digging up box scores and charting plays. I just got tired of re-cleaning their work for every side project, so I built the clean layer once and put it behind a free API. All the credit for the data goes to them. If this saves you an afternoon, that's the whole reward.</p>
             <div class="credit-sign">&mdash; The nfldata guy</div>
         </div>
