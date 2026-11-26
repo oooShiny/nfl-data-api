@@ -87,6 +87,32 @@ def test_clean_historical_pbp(tmp_path):
     assert df.schema["exp_pts_after"] == pl.Float64
 
 
+def test_score_lag_after_touchdown_is_not_a_second_touchdown(tmp_path):
+    # 1989-90: with a failed conversion PFR puts the 6 on the row after the
+    # touchdown (the missed kick, or a blank row).
+    base = dict(game_id="1989_06_NE_ATL", season="1989", week="6", game_type="REG",
+                home_team="ATL", away_team="NE", quarter="2", time="", down="", yds_to_go="",
+                location="", exp_pts_before="", exp_pts_after="", home_score="0",
+                boxscore_url="https://www.pro-football-reference.com/boxscores/198910150atl.htm")
+    rows = [
+        ("1", "0", "Doug Flutie pass complete to Cedric Jones for 15 yards, touchdown"),
+        ("2", "6", "Greg Davis kicks extra point no good"),
+        ("3", "6", "Doug Flutie pass complete to Cedric Jones for 15 yards, touchdown"),
+        ("4", "12", None),
+        ("5", "12", "Greg Davis kicks off 55 yards"),
+        # A blank row with a 6-point jump after a play not called a touchdown
+        # (a fumble return cut short) is still the touchdown.
+        ("6", "12", "Doug Flutie fumbles, recovered by John Stephens at"),
+        ("7", "18", None),
+    ]
+    src = tmp_path / "1989.parquet"
+    pl.DataFrame([{**base, "play_seq": q, "away_score": a, "detail": d} for q, a, d in rows]).write_parquet(src)
+
+    df = clean_dataset("historical_pbp", src)
+
+    assert df["touchdown"].to_list() == [True, False, True, False, False, False, True]
+
+
 def test_load_fact_historical_plays_and_endpoint(tmp_path, monkeypatch):
     silver = tmp_path / "silver"
     (silver / "historical_pbp").mkdir(parents=True)

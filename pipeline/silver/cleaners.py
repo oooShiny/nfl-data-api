@@ -396,16 +396,17 @@ def _clean_historical_pbp(df: pl.DataFrame) -> pl.DataFrame:
     df = pl.concat([df, parsed], how="horizontal")
 
     # Some PFR descriptions are truncated before ", touchdown", so a play whose
-    # running score jumps by 6 for either team is also a touchdown.
+    # running score jumps by 6 for either team is also a touchdown. In some
+    # seasons (1989-90) PFR puts the 6 on the row after the touchdown when the
+    # conversion fails (the missed kick, or a blank row), so a jump on a
+    # conversion, or right after a play already called a touchdown, is that
+    # same touchdown.
     prev_away = pl.col("away_score").forward_fill().shift(1).over("game_id").fill_null(0)
     prev_home = pl.col("home_score").forward_fill().shift(1).over("game_id").fill_null(0)
-    df = df.with_columns(
-        (
-            pl.col("touchdown")
-            | ((pl.col("away_score") - prev_away) == 6).fill_null(False)
-            | ((pl.col("home_score") - prev_home) == 6).fill_null(False)
-        ).alias("touchdown")
-    )
+    prev_td = pl.col("touchdown").shift(1).over("game_id").fill_null(False)
+    jump = (((pl.col("away_score") - prev_away) == 6) | ((pl.col("home_score") - prev_home) == 6)).fill_null(False)
+    conversion = ((pl.col("play_type") == "extra_point") | pl.col("two_point_attempt")).fill_null(False)
+    df = df.with_columns((pl.col("touchdown") | (jump & ~prev_td & ~conversion)).alias("touchdown"))
 
     df = df.select([
         "game_id", "play_seq", "season", "week", "game_type", "home_team", "away_team",
