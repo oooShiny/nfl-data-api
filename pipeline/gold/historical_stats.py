@@ -18,26 +18,36 @@ Counting rules (as in the official stats):
   - plays with no inferred posteam count for the players (team NULL) but
     not for either team
   - a passing/rushing/receiving TD needs the team with the ball to score
-    on the play (from the running score), so pick-sixes and fumble-return
-    TDs don't count for the offense
+    on the play or its conversion (from the running score, when it shows
+    anyone scoring), so pick-sixes and fumble-return
+    TDs don't count for the offense, nor does a fumble recovered in the end
+    zone
 """
 
 import duckdb
 
 # One row per offensive play, with the flags the season sums need.
-_PLAYS_SQL = """
+_PLAYS_SQL = r"""
 CREATE OR REPLACE TEMP TABLE _hist_off AS
 WITH scores AS (
     SELECT *,
         coalesce(lag(home_score IGNORE NULLS) OVER w, 0) AS prev_home,
         coalesce(lag(away_score IGNORE NULLS) OVER w, 0) AS prev_away,
+        -- 1989-90: PFR puts a touchdown's 6 on the conversion row, after any
+        -- penalty rows, so the score after the play is the later of its own
+        -- and the next non-penalty row's.
+        greatest(home_score, first_value(CASE WHEN play_type IS DISTINCT FROM 'no_play' THEN home_score END
+                                         IGNORE NULLS) OVER after) AS after_home,
+        greatest(away_score, first_value(CASE WHEN play_type IS DISTINCT FROM 'no_play' THEN away_score END
+                                         IGNORE NULLS) OVER after) AS after_away,
         -- Accepted intentional grounding is an incomplete pass by the
         -- penalized passer; PFR's text often has only the penalty.
         play_type IN ('no_play', 'other') AND penalized_player IS NOT NULL
             AND regexp_matches(description, 'Penalty on [^:]+: Intentional Grounding')
             AND NOT regexp_matches(description, 'Intentional Grounding[^.]*\((declined|offset)\)') AS grounding
     FROM fact_historical_plays
-    WINDOW w AS (PARTITION BY game_id ORDER BY play_seq)
+    WINDOW w AS (PARTITION BY game_id ORDER BY play_seq),
+           after AS (w ROWS BETWEEN 1 FOLLOWING AND UNBOUNDED FOLLOWING)
 )
 SELECT season,
        CASE WHEN game_type = 'REG' THEN 'REG' ELSE 'POST' END AS season_type,
@@ -52,8 +62,15 @@ SELECT season,
        (sacker IS NOT NULL OR regexp_matches(description, ' sacked( |$)')) AS sack,
        (play_type = 'pass' AND regexp_matches(description, ' pass complete')) AS complete,
        (interceptor IS NOT NULL OR regexp_matches(description, ' intercepted ')) AS interception,
-       touchdown AND (CASE WHEN posteam = home_team THEN home_score - prev_home
-                           ELSE away_score - prev_away END) >= 6 AS off_td
+       touchdown AND ((CASE WHEN posteam = home_team THEN after_home - prev_home
+                            ELSE after_away - prev_away END) >= 6
+                      -- PFR's running score sometimes misses a touchdown
+                      -- altogether; with no score for either side, the
+                      -- description is all there is
+                      OR (after_home - prev_home < 6 AND after_away - prev_away < 6))
+           -- a fumble recovered for a touchdown is the recoverer's, not a
+           -- rushing/receiving touchdown
+           AND NOT regexp_matches(description, 'recovered by [^.]*touchdown') AS off_td
 FROM scores
 WHERE (play_type IN ('pass', 'run', 'qb_kneel', 'qb_spike') OR grounding)
   AND NOT coalesce(two_point_attempt, false)

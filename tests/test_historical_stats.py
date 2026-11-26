@@ -69,6 +69,34 @@ def test_player_and_team_season_stats():
     assert team == [("DEN", 4, 1, 20, 7, 13, 1, 1, 2, 4, 1), ("NE", 0, 0, 0, 0, 0, 0, 0, 1, 0, 0)]
 
 
+def test_rushing_tds_follow_the_running_score_through_its_quirks():
+    con = duckdb.connect()
+    con.execute(SCHEMA_SQL)
+    g = "1990_01_MIA_NE"
+    rows = [  # (seq, play_type, description, rusher, home_score, away_score)
+        # 1989-90: the 6 lands on the conversion, after a penalty row.
+        (1, "run", "John Stephens left guard for 1 yard, touchdown", "John Stephens", 0, 0),
+        (2, "no_play", "Penalty on NE: Illegal Procedure, 5 yards (accepted)", None, 0, 0),
+        (3, "extra_point", "Jason Staurovsky kicks extra point good", None, 7, 0),
+        # The running score misses this one entirely.
+        (4, "run", "John Stephens middle for 4 yards, touchdown", "John Stephens", 7, 0),
+        (5, "extra_point", "Jason Staurovsky kicks extra point good", None, 7, 0),
+        # A fumble recovered in the end zone is the recoverer's touchdown.
+        (6, "run", "John Stephens middle for 1 yard. John Stephens fumbles, recovered by "
+            "Bruce Armstrong at MIA0, touchdown", "John Stephens", 13, 0),
+        (7, "extra_point", "Jason Staurovsky kicks extra point good", None, 14, 0),
+    ]
+    for seq, pt, desc, rusher, h, a in rows:
+        cols = dict(game_id=g, play_seq=seq, season=1990, week=1, game_type="REG", home_team="NE",
+                    away_team="MIA", posteam="NE", defteam="MIA", quarter=1, play_type=pt, description=desc,
+                    yards_gained=1 if rusher else None, touchdown="touchdown" in desc,
+                    two_point_attempt=False, rusher=rusher, home_score=h, away_score=a)
+        con.execute(f"INSERT INTO fact_historical_plays ({', '.join(cols)}) VALUES ({', '.join('?' * len(cols))})",
+                    list(cols.values()))
+    build_historical_season_stats(con)
+    assert con.execute("SELECT carries, rushing_tds FROM fact_historical_player_season_stats").fetchall() == [(3, 2)]
+
+
 def test_stats_endpoints_read_historical_tables_before_1999():
     con = _db()
     out = player_season_stats(None, player_id=None, season=1998, season_type=None, position="QB",
