@@ -345,6 +345,7 @@ _PFR_LOCATION_CODES = {
     "GNB": "GB", "KAN": "KC", "NOR": "NO", "NWE": "NE", "SDG": "SD", "SFO": "SF",
     "TAM": "TB", "WAS": "WSH", "RAM": "LA", "PHO": "PHX",
 }
+_PFR_LOCATION_CODES_ALT = {"STL": "SLC"}
 
 _HISTORICAL_PBP_STR_COLS = [
     "game_id", "game_type", "home_team", "away_team", "boxscore_url",
@@ -377,10 +378,15 @@ def _clean_historical_pbp(df: pl.DataFrame) -> pl.DataFrame:
 
     # Field-position side in dim_games team codes when it maps onto one of the
     # two teams in the game; otherwise PFR's raw code is kept.
+    # PFR's STL is the Rams in 1995-98 but the Cardinals (SLC) through 1987,
+    # so that one is tried only when the fixed map doesn't match the game.
+    def in_game(code):
+        return (code == pl.col("home_team")) | (code == pl.col("away_team"))
     mapped = pl.col("_side_raw").replace(_PFR_LOCATION_CODES)
+    alt = pl.col("_side_raw").replace(_PFR_LOCATION_CODES_ALT)
     df = df.with_columns(
-        pl.when((mapped == pl.col("home_team")) | (mapped == pl.col("away_team")) | pl.col("_side_raw").is_null())
-        .then(mapped)
+        pl.when(in_game(mapped) | pl.col("_side_raw").is_null()).then(mapped)
+        .when(in_game(alt)).then(alt)
         .otherwise(pl.col("_side_raw"))
         .alias("yardline_side")
     )
@@ -400,13 +406,21 @@ def _clean_historical_pbp(df: pl.DataFrame) -> pl.DataFrame:
     # seasons (1989-90) PFR puts the 6 on the row after the touchdown when the
     # conversion fails (the missed kick, or a blank row), so a jump on a
     # conversion, or right after a play already called a touchdown, is that
-    # same touchdown.
+    # same touchdown. In 1987 the 6 can also land on a penalty row after the
+    # try, or (one game) on the play before the touchdown, so neither a
+    # penalty row two rows after a touchdown nor the row before one is one.
+    # (Other penalty rows can be: a touchdown whose text is only the declined
+    # penalty.)
     prev_away = pl.col("away_score").forward_fill().shift(1).over("game_id").fill_null(0)
     prev_home = pl.col("home_score").forward_fill().shift(1).over("game_id").fill_null(0)
     prev_td = pl.col("touchdown").shift(1).over("game_id").fill_null(False)
     jump = (((pl.col("away_score") - prev_away) == 6) | ((pl.col("home_score") - prev_home) == 6)).fill_null(False)
     conversion = ((pl.col("play_type") == "extra_point") | pl.col("two_point_attempt")).fill_null(False)
-    df = df.with_columns((pl.col("touchdown") | (jump & ~prev_td & ~conversion)).alias("touchdown"))
+    next_td = pl.col("touchdown").shift(-1).over("game_id").fill_null(False)
+    prev2_td = pl.col("touchdown").shift(2).over("game_id").fill_null(False)
+    late_penalty = ((pl.col("play_type") == "no_play") & prev2_td).fill_null(False)
+    df = df.with_columns(
+        (pl.col("touchdown") | (jump & ~prev_td & ~next_td & ~conversion & ~late_penalty)).alias("touchdown"))
 
     df = df.select([
         "game_id", "play_seq", "season", "week", "game_type", "home_team", "away_team",
