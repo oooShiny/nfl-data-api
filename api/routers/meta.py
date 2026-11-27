@@ -11,7 +11,8 @@ router = APIRouter(tags=["meta"])
 GOLD_TABLES = [
     "dim_players", "dim_teams", "dim_games",
     "fact_game_scoring", "fact_historical_plays",
-    "fact_historical_player_season_stats", "fact_historical_team_season_stats",
+    "fact_historical_player_game_stats", "fact_historical_player_season_stats",
+    "fact_historical_team_season_stats",
     "fact_plays", "fact_pass_plays", "fact_rush_plays", "fact_kick_plays",
     "fact_pbp_participation", "fact_ftn_charting",
     "fact_player_game_stats", "fact_player_season_stats", "fact_weekly_rosters", "fact_rosters",
@@ -77,9 +78,11 @@ COVERAGE_ROWS: list[tuple[str, str, str]] = [
      "SELECT TRY_CAST(split_part(game_id, '_', 1) AS INTEGER), count(*) FROM fact_pbp_participation GROUP BY 1"),
     ("Play-by-Play", "FTN charting",
      "SELECT season, count(*) FROM fact_ftn_charting GROUP BY 1"),
+    # Before 1999: derived from the PFR play-by-play (fact_historical_*_stats).
     ("Players & Stats", "Game stat lines",
-     "SELECT season, count(*) FROM fact_player_game_stats GROUP BY 1"),
-    # Before 1999: derived from the PFR play-by-play (fact_historical_*_season_stats).
+     """SELECT season, count(*) FROM (
+            SELECT season FROM fact_player_game_stats UNION ALL
+            SELECT season FROM fact_historical_player_game_stats) GROUP BY 1"""),
     ("Players & Stats", "Season stat totals",
      """SELECT season, count(*) FROM (
             SELECT season FROM fact_player_season_stats WHERE season_type = 'REG' UNION ALL

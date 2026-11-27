@@ -252,21 +252,169 @@ CREATE TABLE IF NOT EXISTS fact_historical_player_season_stats (
     player_name             VARCHAR,      -- as written in PFR's play-by-play
     position                VARCHAR,      -- from fact_rosters
     team                    VARCHAR,      -- one row per player and team
-    games                   SMALLINT,     -- games with a pass, rush or target
+    games                   SMALLINT,     -- games with any stat below
     completions             INTEGER,
-    attempts                INTEGER,      -- incl. spikes and intentional grounding
-    passing_yards           INTEGER,      -- gross
+    attempts                INTEGER,     -- incl. spikes and intentional grounding
+    passing_yards           INTEGER,     -- gross
     passing_tds             INTEGER,
     passing_interceptions   INTEGER,
     sacks_suffered          INTEGER,
     sack_yards_lost         INTEGER,
-    carries                 INTEGER,      -- incl. kneels and aborted snaps
+    carries                 INTEGER,     -- incl. kneels and aborted snaps
     rushing_yards           INTEGER,
     rushing_tds             INTEGER,
     targets                 INTEGER,
     receptions              INTEGER,
     receiving_yards         INTEGER,
     receiving_tds           INTEGER,
+    fumbles                 INTEGER,
+    fumbles_lost            INTEGER,     -- recovered by the other team
+    def_sacks               DOUBLE,      -- split sacks are 0.5 each
+    def_sack_yards          DOUBLE,
+    def_interceptions       INTEGER,
+    def_interception_yards  INTEGER,
+    def_interception_tds    INTEGER,     -- not in fact_player_season_stats
+    def_fumbles_forced      INTEGER,
+    fumble_recovery_own     INTEGER,
+    fumble_recovery_opp     INTEGER,
+    fumble_recovery_tds     INTEGER,
+    fg_made                 INTEGER,
+    fg_att                  INTEGER,
+    fg_blocked              INTEGER,
+    fg_long                 INTEGER,
+    fg_made_0_19            INTEGER,
+    fg_made_20_29           INTEGER,
+    fg_made_30_39           INTEGER,
+    fg_made_40_49           INTEGER,
+    fg_made_50_59           INTEGER,
+    fg_made_60_             INTEGER,
+    fg_missed_0_19          INTEGER,
+    fg_missed_20_29         INTEGER,
+    fg_missed_30_39         INTEGER,
+    fg_missed_40_49         INTEGER,
+    fg_missed_50_59         INTEGER,
+    fg_missed_60_           INTEGER,
+    pat_made                INTEGER,
+    pat_att                 INTEGER,
+    punts                   INTEGER,     -- incl. blocked punts (0 yards)
+    punt_yards              INTEGER,     -- gross
+    punt_long               INTEGER,
+    punts_blocked           INTEGER,     -- not in fact_player_season_stats
+    kickoff_returns         INTEGER,
+    kickoff_return_yards    INTEGER,
+    kickoff_return_tds      INTEGER,
+    punt_returns            INTEGER,
+    punt_return_yards       INTEGER,
+    punt_return_tds         INTEGER,
+    source                  VARCHAR       -- 'pfr_pbp'
+);
+
+-- For databases created before defense and special teams were added.
+ALTER TABLE fact_historical_player_season_stats ADD COLUMN IF NOT EXISTS fumbles INTEGER;
+ALTER TABLE fact_historical_player_season_stats ADD COLUMN IF NOT EXISTS fumbles_lost INTEGER;
+ALTER TABLE fact_historical_player_season_stats ADD COLUMN IF NOT EXISTS def_sacks DOUBLE;
+ALTER TABLE fact_historical_player_season_stats ADD COLUMN IF NOT EXISTS def_sack_yards DOUBLE;
+ALTER TABLE fact_historical_player_season_stats ADD COLUMN IF NOT EXISTS def_interceptions INTEGER;
+ALTER TABLE fact_historical_player_season_stats ADD COLUMN IF NOT EXISTS def_interception_yards INTEGER;
+ALTER TABLE fact_historical_player_season_stats ADD COLUMN IF NOT EXISTS def_interception_tds INTEGER;
+ALTER TABLE fact_historical_player_season_stats ADD COLUMN IF NOT EXISTS def_fumbles_forced INTEGER;
+ALTER TABLE fact_historical_player_season_stats ADD COLUMN IF NOT EXISTS fumble_recovery_own INTEGER;
+ALTER TABLE fact_historical_player_season_stats ADD COLUMN IF NOT EXISTS fumble_recovery_opp INTEGER;
+ALTER TABLE fact_historical_player_season_stats ADD COLUMN IF NOT EXISTS fumble_recovery_tds INTEGER;
+ALTER TABLE fact_historical_player_season_stats ADD COLUMN IF NOT EXISTS fg_made INTEGER;
+ALTER TABLE fact_historical_player_season_stats ADD COLUMN IF NOT EXISTS fg_att INTEGER;
+ALTER TABLE fact_historical_player_season_stats ADD COLUMN IF NOT EXISTS fg_blocked INTEGER;
+ALTER TABLE fact_historical_player_season_stats ADD COLUMN IF NOT EXISTS fg_long INTEGER;
+ALTER TABLE fact_historical_player_season_stats ADD COLUMN IF NOT EXISTS fg_made_0_19 INTEGER;
+ALTER TABLE fact_historical_player_season_stats ADD COLUMN IF NOT EXISTS fg_made_20_29 INTEGER;
+ALTER TABLE fact_historical_player_season_stats ADD COLUMN IF NOT EXISTS fg_made_30_39 INTEGER;
+ALTER TABLE fact_historical_player_season_stats ADD COLUMN IF NOT EXISTS fg_made_40_49 INTEGER;
+ALTER TABLE fact_historical_player_season_stats ADD COLUMN IF NOT EXISTS fg_made_50_59 INTEGER;
+ALTER TABLE fact_historical_player_season_stats ADD COLUMN IF NOT EXISTS fg_made_60_ INTEGER;
+ALTER TABLE fact_historical_player_season_stats ADD COLUMN IF NOT EXISTS fg_missed_0_19 INTEGER;
+ALTER TABLE fact_historical_player_season_stats ADD COLUMN IF NOT EXISTS fg_missed_20_29 INTEGER;
+ALTER TABLE fact_historical_player_season_stats ADD COLUMN IF NOT EXISTS fg_missed_30_39 INTEGER;
+ALTER TABLE fact_historical_player_season_stats ADD COLUMN IF NOT EXISTS fg_missed_40_49 INTEGER;
+ALTER TABLE fact_historical_player_season_stats ADD COLUMN IF NOT EXISTS fg_missed_50_59 INTEGER;
+ALTER TABLE fact_historical_player_season_stats ADD COLUMN IF NOT EXISTS fg_missed_60_ INTEGER;
+ALTER TABLE fact_historical_player_season_stats ADD COLUMN IF NOT EXISTS pat_made INTEGER;
+ALTER TABLE fact_historical_player_season_stats ADD COLUMN IF NOT EXISTS pat_att INTEGER;
+ALTER TABLE fact_historical_player_season_stats ADD COLUMN IF NOT EXISTS punts INTEGER;
+ALTER TABLE fact_historical_player_season_stats ADD COLUMN IF NOT EXISTS punt_yards INTEGER;
+ALTER TABLE fact_historical_player_season_stats ADD COLUMN IF NOT EXISTS punt_long INTEGER;
+ALTER TABLE fact_historical_player_season_stats ADD COLUMN IF NOT EXISTS punts_blocked INTEGER;
+ALTER TABLE fact_historical_player_season_stats ADD COLUMN IF NOT EXISTS kickoff_returns INTEGER;
+ALTER TABLE fact_historical_player_season_stats ADD COLUMN IF NOT EXISTS kickoff_return_yards INTEGER;
+ALTER TABLE fact_historical_player_season_stats ADD COLUMN IF NOT EXISTS kickoff_return_tds INTEGER;
+ALTER TABLE fact_historical_player_season_stats ADD COLUMN IF NOT EXISTS punt_returns INTEGER;
+ALTER TABLE fact_historical_player_season_stats ADD COLUMN IF NOT EXISTS punt_return_yards INTEGER;
+ALTER TABLE fact_historical_player_season_stats ADD COLUMN IF NOT EXISTS punt_return_tds INTEGER;
+
+-- One row per player, team and game, from the same counting rules (season
+-- rows above sum these). /v1/stats/game serves it before 1999.
+CREATE TABLE IF NOT EXISTS fact_historical_player_game_stats (
+    game_id                 VARCHAR,
+    season                  SMALLINT,
+    week                    SMALLINT,
+    season_type             VARCHAR,      -- REG or POST
+    player_id               VARCHAR,      -- gsis_id; NULL when the name didn't match a roster
+    player_name             VARCHAR,      -- as written in PFR's play-by-play
+    position                VARCHAR,
+    team                    VARCHAR,
+    opponent                VARCHAR,
+    completions             INTEGER,
+    attempts                INTEGER,     -- incl. spikes and intentional grounding
+    passing_yards           INTEGER,     -- gross
+    passing_tds             INTEGER,
+    passing_interceptions   INTEGER,
+    sacks_suffered          INTEGER,
+    sack_yards_lost         INTEGER,
+    carries                 INTEGER,     -- incl. kneels and aborted snaps
+    rushing_yards           INTEGER,
+    rushing_tds             INTEGER,
+    targets                 INTEGER,
+    receptions              INTEGER,
+    receiving_yards         INTEGER,
+    receiving_tds           INTEGER,
+    fumbles                 INTEGER,
+    fumbles_lost            INTEGER,     -- recovered by the other team
+    def_sacks               DOUBLE,      -- split sacks are 0.5 each
+    def_sack_yards          DOUBLE,
+    def_interceptions       INTEGER,
+    def_interception_yards  INTEGER,
+    def_interception_tds    INTEGER,     -- not in fact_player_season_stats
+    def_fumbles_forced      INTEGER,
+    fumble_recovery_own     INTEGER,
+    fumble_recovery_opp     INTEGER,
+    fumble_recovery_tds     INTEGER,
+    fg_made                 INTEGER,
+    fg_att                  INTEGER,
+    fg_blocked              INTEGER,
+    fg_long                 INTEGER,
+    fg_made_0_19            INTEGER,
+    fg_made_20_29           INTEGER,
+    fg_made_30_39           INTEGER,
+    fg_made_40_49           INTEGER,
+    fg_made_50_59           INTEGER,
+    fg_made_60_             INTEGER,
+    fg_missed_0_19          INTEGER,
+    fg_missed_20_29         INTEGER,
+    fg_missed_30_39         INTEGER,
+    fg_missed_40_49         INTEGER,
+    fg_missed_50_59         INTEGER,
+    fg_missed_60_           INTEGER,
+    pat_made                INTEGER,
+    pat_att                 INTEGER,
+    punts                   INTEGER,     -- incl. blocked punts (0 yards)
+    punt_yards              INTEGER,     -- gross
+    punt_long               INTEGER,
+    punts_blocked           INTEGER,     -- not in fact_player_season_stats
+    kickoff_returns         INTEGER,
+    kickoff_return_yards    INTEGER,
+    kickoff_return_tds      INTEGER,
+    punt_returns            INTEGER,
+    punt_return_yards       INTEGER,
+    punt_return_tds         INTEGER,
     source                  VARCHAR       -- 'pfr_pbp'
 );
 
