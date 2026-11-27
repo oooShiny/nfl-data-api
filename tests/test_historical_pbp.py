@@ -23,6 +23,9 @@ from pipeline.silver.pfr_pbp_parser import parse_detail
      {"play_type": "pass", "passer": "Tony Banks", "sacker": "Jared Tomich", "yards_gained": -9}),
     ("Jake Plummer sacked by Kavika Pittman and Tony Tolbert for 8 yards",  # split sack
      {"play_type": "pass", "passer": "Jake Plummer", "sacker": "Kavika Pittman", "yards_gained": -8}),
+    # A sack with no "for N yards" before the next sentence: the name stops there.
+    ("John Elway sacked by Clyde Simmons. John Elway fumbles (forced by Clyde Simmons and Reggie White for 7 yards",
+     {"play_type": "pass", "passer": "John Elway", "sacker": "Clyde Simmons"}),
     ("Troy Aikman pass intended for Eric Bjornson is intercepted by Ronald McKinnon at AC30 and returned for 4 yards",
      {"play_type": "pass", "passer": "Troy Aikman", "receiver": "Eric Bjornson", "interceptor": "Ronald McKinnon"}),
     # The defender fumbles on the return; the receiver has initials.

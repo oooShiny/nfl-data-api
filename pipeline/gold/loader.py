@@ -1820,13 +1820,14 @@ def _match_historical_player_ids(con: duckdb.DuckDBPyConnection) -> None:
 
 
 def load_historical_season_stats(con: duckdb.DuckDBPyConnection) -> None:
-    from pipeline.gold.historical_stats import build_historical_season_stats
+    from pipeline.gold.historical_stats import build_historical_stats
 
     if con.execute("SELECT count(*) FROM fact_historical_plays").fetchone()[0] == 0:
         console.print("  [yellow]historical season stats: fact_historical_plays empty[/yellow]")
         return
-    players, teams = build_historical_season_stats(con)
-    console.print(f"  [green]✓[/green] fact_historical_player_season_stats: {players:,} rows, "
+    games, players, teams = build_historical_stats(con)
+    console.print(f"  [green]✓[/green] fact_historical_player_game_stats: {games:,} rows, "
+                  f"fact_historical_player_season_stats: {players:,} rows, "
                   f"fact_historical_team_season_stats: {teams:,} rows")
 
 

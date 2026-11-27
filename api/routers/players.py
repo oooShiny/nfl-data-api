@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from api.deps import _build_filter, get_db
 from api.models.responses import PaginatedResponse, Player, PlayerGameStats
+from api.routers.advanced import PLAYER_GAME_STATS
 
 router = APIRouter(tags=["players"])
 
@@ -88,10 +89,10 @@ def get_player_stats(
     ]
     where, params = _build_filter(filters)
     total = db.execute(
-        f"SELECT COUNT(*) FROM fact_player_game_stats {where}", params
+        f"SELECT COUNT(*) FROM {PLAYER_GAME_STATS} {where}", params
     ).fetchone()[0]
     rows = db.execute(
-        f"SELECT * FROM fact_player_game_stats {where} ORDER BY season DESC, week DESC LIMIT ? OFFSET ?",
+        f"SELECT * FROM {PLAYER_GAME_STATS} {where} ORDER BY season DESC, week DESC LIMIT ? OFFSET ?",
         params + [limit, offset],
     ).fetchall()
     cols = [d[0] for d in db.description]

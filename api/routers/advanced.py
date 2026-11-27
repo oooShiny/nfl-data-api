@@ -13,6 +13,15 @@ router = APIRouter(tags=["advanced"])
 HISTORICAL_LAST_SEASON = 1998
 
 
+# Pre-1999 game lines with the nflverse names the PlayerGameStats endpoints
+# expect (team -> recent_team, ...), unioned with fact_player_game_stats.
+PLAYER_GAME_STATS = """(SELECT * FROM fact_player_game_stats UNION ALL BY NAME
+    SELECT * EXCLUDE (team, passing_interceptions, sacks_suffered, sack_yards_lost),
+           team AS recent_team, passing_interceptions AS interceptions,
+           sacks_suffered AS sacks, sack_yards_lost AS sack_yards
+    FROM fact_historical_player_game_stats)"""
+
+
 def _season_source(nflverse: str, historical: str, season: int | None) -> str:
     """Table (or union of both) to read for a season filter."""
     if season is None:
@@ -54,8 +63,9 @@ def player_season_stats(
     db: duckdb.DuckDBPyConnection = Depends(get_db),
 ):
     """Player season stats. 1999+ from nflverse; 1970-1998 derived from PFR
-    play-by-play (source = 'pfr_pbp': passing, rushing and receiving totals,
-    REG and POST, one row per player and team)."""
+    play-by-play (source = 'pfr_pbp': passing, rushing, receiving, fumbles,
+    defense, kicking, punting and returns, REG and POST, one row per player
+    and team)."""
     filters = [
         ("player_id = ?", player_id),
         ("season = ?", season),
@@ -68,6 +78,41 @@ def player_season_stats(
     if season is not None and season <= HISTORICAL_LAST_SEASON:
         order = "passing_yards + rushing_yards + receiving_yards DESC"
     return list_table(db, table, filters, order, limit, offset)
+
+
+@router.get("/stats/game", response_model=PaginatedResponse[dict[str, Any]])
+def player_game_stats(
+    request: Request,
+    player_id: str | None = None,
+    game_id: str | None = None,
+    season: int | None = None,
+    week: int | None = None,
+    season_type: str | None = None,
+    team: str | None = None,
+    limit: int = Query(default=50, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
+    db: duckdb.DuckDBPyConnection = Depends(get_db),
+):
+    """Player game stat lines, every column. 1999+ from nflverse
+    (fact_player_game_stats, team in recent_team); 1970-1998 derived from PFR
+    play-by-play (fact_historical_player_game_stats, source = 'pfr_pbp':
+    offense, fumbles, defense, kicking, punting and returns; team in team)."""
+    if game_id is not None and season is None and game_id[:4].isdigit():
+        season = int(game_id[:4])
+    historical = season is not None and season <= HISTORICAL_LAST_SEASON
+    filters = [
+        ("player_id = ?", player_id),
+        ("game_id = ?", game_id),
+        ("season = ?", season),
+        ("week = ?", week),
+        ("season_type = ?", season_type),
+        (("team = ?" if historical else "recent_team = ?"), team),
+    ]
+    if season is None:
+        table = PLAYER_GAME_STATS
+    else:
+        table = "fact_historical_player_game_stats" if historical else "fact_player_game_stats"
+    return list_table(db, table, filters, "season DESC, week DESC, game_id, player_name", limit, offset)
 
 
 @router.get("/stats/ngs/passing", response_model=PaginatedResponse[dict[str, Any]])

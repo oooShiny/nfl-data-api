@@ -1,11 +1,15 @@
 // Fetches PFR's official season stat tables, used to check the stats we
 // derive from pre-1999 play-by-play (scripts/check_historical_stats.py).
 //
-// Per season, 4 pages:
+// Per season, 8 pages:
 //   years/<season>/passing.htm    table#passing
 //   years/<season>/rushing.htm    table#rushing
 //   years/<season>/receiving.htm  table#receiving
 //   years/<season>/               table#team_stats (team offense)
+//   years/<season>/defense.htm    table#defense
+//   years/<season>/kicking.htm    table#kicking
+//   years/<season>/punting.htm    table#punting
+//   years/<season>/returns.htm    table#returns
 //
 // Same browser and pace as scrape-pfr-pbp.mjs (agent-browser over CDP 9222,
 // 25-40s between pages, hard stop on rate-limit pages). Don't run it while
@@ -44,6 +48,8 @@ const PAGES = [
   { table: 'rushing', url: (s) => `https://www.pro-football-reference.com/years/${s}/rushing.htm` },
   { table: 'receiving', url: (s) => `https://www.pro-football-reference.com/years/${s}/receiving.htm` },
   { table: 'team_stats', url: (s) => `https://www.pro-football-reference.com/years/${s}/` },
+  ...['defense', 'kicking', 'punting', 'returns'].map((t) => (
+    { table: t, url: (s) => `https://www.pro-football-reference.com/years/${s}/${t}.htm` })),
 ];
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

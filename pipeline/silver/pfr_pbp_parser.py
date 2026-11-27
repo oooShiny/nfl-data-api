@@ -154,11 +154,18 @@ def classify(detail: str) -> tuple[str, dict]:
     return "other", {}
 
 
+# NAME allows periods (initials: "J.J. Stokes"), so it can run on into the
+# next sentence: "sacked by Clyde Simmons. John Elway fumbles". A ". " after
+# two lowercase letters ends a sentence, not an initial or "Jr.".
+_RUN_ON_RE = re.compile(r"(?<=[a-z]{2})\. [A-Z].*$")
+
+
 def clean_name(name: str | None) -> str | None:
-    """Strip whitespace and a trailing sentence period NAME can swallow."""
+    """Strip whitespace, a run-on next sentence, and a trailing sentence
+    period NAME can swallow."""
     if not name:
         return None
-    name = name.strip()
+    name = _RUN_ON_RE.sub("", name.strip())
     if name.endswith(".") and not re.search(r"\b[A-Z]\.$", name):
         name = name[:-1]
     return name or None

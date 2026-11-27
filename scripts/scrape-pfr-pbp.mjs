@@ -10,7 +10,10 @@
 // boxscore_url), so no team/season pages are fetched.
 //
 // Output: one CSV per game at data/scraped/pfr_pbp/<season>/<game_id>.csv
-// (gitignored). A game whose boxscore has no play-by-play table gets an empty
+// (gitignored), plus every other table on the same page (box score, defense,
+// returns, kicking, team stats, starters, drives: whatever PFR has for the
+// game) as data/scraped/pfr_boxscore/<season>/<game_id>.json, from the same
+// page load, to check stats derived from the play-by-play game by game. A game whose boxscore has no play-by-play table gets an empty
 // <game_id>.none marker so it isn't retried. Existing files = done, so the
 // script is resumable: just restart it.
 //
@@ -34,6 +37,7 @@ const ROOT = path.resolve(__dirname, '..');
 const OUT_DIR = process.env.PBP_OUT_DIR || path.join(ROOT, 'data', 'scraped', 'pfr_pbp');
 // Every failed attempt is appended here (see scripts/pbp-scrape-report.mjs).
 const FAILURES_FILE = path.join(OUT_DIR, 'failures.csv');
+const BOX_DIR = process.env.BOXSCORE_OUT_DIR || path.join(ROOT, 'data', 'scraped', 'pfr_boxscore');
 
 const args = process.argv.slice(2);
 const limitIdx = args.indexOf('--limit');
@@ -141,7 +145,35 @@ async function scrapeBoxscore(url) {
         }
       }
     }
+    // Every other table, including those still inside comments:
+    // {id: [{data-stat: text, player_href}]}. Best effort; never fails the game.
+    const tables = {};
+    try {
+      const found = Array.from(document.querySelectorAll('table[id]'));
+      const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_COMMENT);
+      for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+        if (!n.textContent.includes('<table')) continue;
+        const d = document.createElement('div');
+        d.innerHTML = n.textContent;
+        found.push(...d.querySelectorAll('table[id]'));
+      }
+      for (const tb of found) {
+        if (tb.id === 'pbp' || tables[tb.id]) continue;
+        tables[tb.id] = Array.from(tb.querySelectorAll('tbody tr'))
+          .filter(r => !r.classList.contains('thead') && !r.classList.contains('over_header'))
+          .map(r => {
+            const c = {};
+            r.querySelectorAll('[data-stat]').forEach(e => c[e.getAttribute('data-stat')] = (e.innerText || e.textContent).trim());
+            const a = r.querySelector('a[href^="/players/"]');
+            if (a) c.player_href = a.getAttribute('href');
+            return c;
+          });
+      }
+    } catch (e) {
+      tables._error = String(e);
+    }
     return {
+      tables,
       // The scoring table is on every boxscore page; if it's missing the page
       // didn't load properly, so an empty pbp table means nothing.
       pageLoaded: !!document.querySelector('table#scoring'),
@@ -185,10 +217,17 @@ async function main() {
     attempts++;
     process.stdout.write(`  [${ts()}] ${g.game_id}...`);
     try {
-      const { pageLoaded, pbpPresent, rows } = await scrapeBoxscore(g.boxscore_url);
+      const { pageLoaded, pbpPresent, rows, tables } = await scrapeBoxscore(g.boxscore_url);
       if (rows.length === 0 && !pageLoaded) throw new Error('page did not finish loading (no scoring table)');
       if (rows.length === 0 && pbpPresent) throw new Error('pbp table present but empty (page not fully rendered)');
+      const saveTables = () => {
+        if (!tables || Object.keys(tables).length === 0) return;
+        const boxDir = path.join(BOX_DIR, String(season));
+        mkdirSync(boxDir, { recursive: true });
+        writeAtomic(path.join(boxDir, `${g.game_id}.json`), JSON.stringify(tables));
+      };
       if (rows.length === 0) {
+        saveTables();
         writeAtomic(path.join(dir, `${g.game_id}.none`), '');
         process.stdout.write(' no play-by-play\n');
       } else {
@@ -214,8 +253,9 @@ async function main() {
             r.pbp_score_aw, r.pbp_score_hm, r.detail, r.exp_pts_before, r.exp_pts_after,
           ].map(csvEscape).join(','),
         );
+        saveTables();
         writeAtomic(path.join(dir, `${g.game_id}.csv`), [CSV_COLUMNS.join(','), ...lines].join('\n') + '\n');
-        process.stdout.write(` ${rows.length} plays\n`);
+        process.stdout.write(` ${rows.length} plays, ${Object.keys(tables || {}).length} other tables\n`);
       }
       consecutiveErrors = 0;
       return true;
