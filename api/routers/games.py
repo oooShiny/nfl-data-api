@@ -72,7 +72,7 @@ def list_game_scoring(
     return list_table(db, "fact_game_scoring", filters, "game_id, play_seq", limit, offset)
 
 
-@router.get("/games/historical-plays", response_model=PaginatedResponse[dict[str, Any]])
+@router.get("/games/historical-plays", response_model=PaginatedResponse[dict[str, Any]], deprecated=True)
 def list_historical_plays(
     request: Request,
     game_id: str | None = None,
@@ -86,12 +86,15 @@ def list_historical_plays(
     offset: int = Query(default=0, ge=0),
     db: duckdb.DuckDBPyConnection = Depends(get_db),
 ):
-    """Full play-by-play for pre-1999 games, scraped from Pro-Football-Reference.
+    """Deprecated: use /v1/plays, which serves every season (this data included)
+    with the same columns as 1999+ plays. Kept for existing callers.
+
+    Full play-by-play for pre-1999 games, scraped from Pro-Football-Reference.
 
     Descriptions plus parsed play_type, yards, touchdowns and player names
     with gsis_ids (*_id, matched through rosters), the team with the ball
     (posteam, inferred from PFR's expected points, scores and field position)
-    and drive numbers. No nflfastR EPA; see /v1/plays for 1999+.
+    and drive numbers. No nflfastR EPA.
     """
     if game_id is None and season is None:
         raise HTTPException(status_code=422, detail="Either 'game_id' or 'season' is required.")

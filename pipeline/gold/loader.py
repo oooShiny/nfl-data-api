@@ -303,32 +303,45 @@ def load_fact_plays(con: duckdb.DuckDBPyConnection) -> None:
         return
 
     con.execute(f"""
-        INSERT OR REPLACE INTO fact_plays
+        INSERT OR REPLACE INTO fact_plays BY NAME
+        WITH src AS (
+            SELECT *,
+                   -- First two tacklers named, solo or assisted, in nflverse's order.
+                   list_filter([
+                       {{'id': solo_tackle_1_player_id, 'name': solo_tackle_1_player_name}},
+                       {{'id': solo_tackle_2_player_id, 'name': solo_tackle_2_player_name}},
+                       {{'id': tackle_with_assist_1_player_id, 'name': tackle_with_assist_1_player_name}},
+                       {{'id': tackle_with_assist_2_player_id, 'name': tackle_with_assist_2_player_name}},
+                       {{'id': assist_tackle_1_player_id, 'name': assist_tackle_1_player_name}},
+                       {{'id': assist_tackle_2_player_id, 'name': assist_tackle_2_player_name}}],
+                       t -> t.id IS NOT NULL OR t.name IS NOT NULL) AS _tacklers
+            FROM read_parquet('{glob}', hive_partitioning=false, union_by_name=true)
+        )
         SELECT
-            play_id::INTEGER,
+            play_id::INTEGER AS play_id,
             game_id,
-            season::SMALLINT,
-            week::SMALLINT,
+            season::SMALLINT AS season,
+            week::SMALLINT AS week,
             game_date,
             qtr::SMALLINT                       AS quarter,
-            game_seconds_remaining::INTEGER,
-            half_seconds_remaining::INTEGER,
-            quarter_seconds_remaining::INTEGER,
-            down::SMALLINT,
-            ydstogo::SMALLINT,
-            yardline_100::SMALLINT,
+            game_seconds_remaining::INTEGER AS game_seconds_remaining,
+            half_seconds_remaining::INTEGER AS half_seconds_remaining,
+            quarter_seconds_remaining::INTEGER AS quarter_seconds_remaining,
+            down::SMALLINT AS down,
+            ydstogo::SMALLINT AS ydstogo,
+            yardline_100::SMALLINT AS yardline_100,
             posteam,
             defteam,
-            posteam_score::SMALLINT,
-            defteam_score::SMALLINT,
-            score_differential::SMALLINT,
+            posteam_score::SMALLINT AS posteam_score,
+            defteam_score::SMALLINT AS defteam_score,
+            score_differential::SMALLINT AS score_differential,
             play_type,
-            yards_gained::SMALLINT,
-            touchdown::BOOLEAN,
+            yards_gained::SMALLINT AS yards_gained,
+            touchdown::BOOLEAN AS touchdown,
             (interception OR fumble_lost)::BOOLEAN  AS turnover,
-            penalty::BOOLEAN,
-            penalty_yards::SMALLINT,
-            first_down::BOOLEAN,
+            penalty::BOOLEAN AS penalty,
+            penalty_yards::SMALLINT AS penalty_yards,
+            first_down::BOOLEAN AS first_down,
             ep,
             epa,
             wp,
@@ -339,11 +352,37 @@ def load_fact_plays(con: duckdb.DuckDBPyConnection) -> None:
             comp_yac_epa,
             qb_epa,
             xyac_epa,
-            series::SMALLINT,
-            series_success::BOOLEAN,
-            drive::SMALLINT,
-            sp::BOOLEAN
-        FROM read_parquet('{glob}', hive_partitioning=false, union_by_name=true)
+            series::SMALLINT AS series,
+            series_success::BOOLEAN AS series_success,
+            drive::SMALLINT                     AS drive,
+            sp::BOOLEAN                         AS sp,
+            season_type,
+            home_team,
+            away_team,
+            time                                AS clock,
+            side_of_field                       AS yardline_side,
+            total_home_score::SMALLINT          AS home_score,
+            total_away_score::SMALLINT          AS away_score,
+            "desc"                              AS description,
+            two_point_attempt::BOOLEAN          AS two_point_attempt,
+            passer_player_id, passer_player_name,
+            rusher_player_id, rusher_player_name,
+            receiver_player_id, receiver_player_name,
+            interception_player_id, interception_player_name,
+            coalesce(sack_player_id, half_sack_1_player_id)                  AS sack_player_id,
+            coalesce(sack_player_name, half_sack_1_player_name)              AS sack_player_name,
+            kicker_player_id, kicker_player_name,
+            punter_player_id, punter_player_name,
+            coalesce(kickoff_returner_player_id, punt_returner_player_id)    AS returner_player_id,
+            coalesce(kickoff_returner_player_name, punt_returner_player_name) AS returner_player_name,
+            _tacklers[1].id AS tackler_1_player_id, _tacklers[1].name AS tackler_1_player_name,
+            _tacklers[2].id AS tackler_2_player_id, _tacklers[2].name AS tackler_2_player_name,
+            forced_fumble_player_1_player_id    AS forced_fumble_player_id,
+            forced_fumble_player_1_player_name  AS forced_fumble_player_name,
+            fumble_recovery_1_player_id         AS fumble_recovery_player_id,
+            fumble_recovery_1_player_name       AS fumble_recovery_player_name,
+            penalty_player_id, penalty_player_name
+        FROM src
         WHERE play_id IS NOT NULL AND game_id IS NOT NULL
     """)
     n = con.execute("SELECT COUNT(*) FROM fact_plays").fetchone()[0]
@@ -1782,9 +1821,34 @@ def load_fact_historical_plays(con: duckdb.DuckDBPyConnection) -> None:
         FROM read_parquet('{glob}', union_by_name=true)
         WHERE game_id IS NOT NULL AND season <= 1998
     """)
+    _derive_historical_play_fields(con)
     n = con.execute("SELECT COUNT(*) FROM fact_historical_plays").fetchone()[0]
     console.print(f"  [green]✓[/green] fact_historical_plays: {n:,} rows")
     _match_historical_player_ids(con)
+
+
+def _derive_historical_play_fields(con: duckdb.DuckDBPyConnection) -> None:
+    """Fill the fields fact_plays has that PFR doesn't give directly: the
+    score before the play (PFR's is after it) by team with the ball, and
+    seconds left in the game and half from the quarter clock."""
+    con.execute("""
+        UPDATE fact_historical_plays p
+        SET posteam_score = CASE p.posteam WHEN p.home_team THEN b.home_before WHEN p.away_team THEN b.away_before END,
+            defteam_score = CASE p.posteam WHEN p.home_team THEN b.away_before WHEN p.away_team THEN b.home_before END,
+            game_seconds_remaining = CASE WHEN p.quarter <= 4 THEN (4 - p.quarter) * 900 ELSE 0 END + b.secs,
+            half_seconds_remaining = CASE WHEN p.quarter IN (1, 3) THEN 900 ELSE 0 END + b.secs
+        FROM (
+            SELECT game_id, play_seq,
+                   coalesce(last_value(home_score IGNORE NULLS) OVER w, 0) AS home_before,
+                   coalesce(last_value(away_score IGNORE NULLS) OVER w, 0) AS away_before,
+                   try_cast(split_part(clock, ':', 1) AS INTEGER) * 60
+                       + try_cast(split_part(clock, ':', 2) AS INTEGER) AS secs
+            FROM fact_historical_plays
+            WINDOW w AS (PARTITION BY game_id ORDER BY play_seq
+                         ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING)
+        ) b
+        WHERE p.game_id = b.game_id AND p.play_seq = b.play_seq
+    """)
 
 
 def _match_historical_player_ids(con: duckdb.DuckDBPyConnection) -> None:

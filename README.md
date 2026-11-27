@@ -23,14 +23,14 @@ GET /v1/players/{gsis_id}/stats?season=&week=&season_type=
 GET /v1/games?season=&week=&team=&game_type=                # 1970-present
 GET /v1/games/{game_id}
 GET /v1/games/scoring?game_id=&season=&team=&scoring_type=&scoring_method=&scorer_id=   # scoring-play summaries, 1970-present
-GET /v1/games/historical-plays?game_id=&season=&week=&team=&play_type=&posteam=&player_id=   # pre-1999 play-by-play (PFR); game_id or season required
+GET /v1/games/historical-plays?...   # deprecated: use /v1/plays, which includes these plays
 GET /v1/games/head-to-head?team1=&team2=&season=&game_type=&top_n=   # matchup history, records, biggest wins, top performances
 ```
 
 ### Plays
-Requires `game_id` **or** `season`. Max 500 per request.
+Every play with play-by-play: 1999 on from nflverse, before 1999 from Pro-Football-Reference (1985–1998 so far). Same columns in both eras (`source` says which); pre-1999 rows have no win probability or air yards, and their EP/EPA is PFR's model. Requires `game_id`, `season`, `team` **or** `player_id`. Max 500 per request.
 ```
-GET /v1/plays?game_id=&season=&week=&play_type=
+GET /v1/plays?game_id=&season=&week=&season_type=&team=&posteam=&play_type=&player_id=
 ```
 
 ### Stats
@@ -136,7 +136,7 @@ Sourced from [nflverse-data](https://github.com/nflverse/nflverse-data) public r
 
 | Table | Rows | Contents |
 |---|---|---|
-| `fact_plays` | 1.28M | Every play: down/distance, field position, score, EPA/WPA, drives/series |
+| `fact_plays` | 1.28M | Every play 1999+: down/distance, field position, clock, score, description, player roles (`<role>_player_id`/`_name`), EPA/WPA, drives/series. `v_plays` (a view) adds the pre-1999 plays in the same columns |
 | `fact_pass_plays` | 524K | Pass-specific detail: passer/receiver, air yards, YAC, completion, CPOE |
 | `fact_rush_plays` | 385K | Rush-specific detail: rusher, run location/gap, TDs |
 | `fact_kick_plays` | 314K | Punts, field goals, extra points, kickoffs, returns |
