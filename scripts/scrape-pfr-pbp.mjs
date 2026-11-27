@@ -17,6 +17,10 @@
 // <game_id>.none marker so it isn't retried. Existing files = done, so the
 // script is resumable: just restart it.
 //
+// When a season's games are all in, it runs scrape-pfr-season-stats.mjs for
+// that season and logs "SEASON_READY <season>" (or SEASON_INCOMPLETE /
+// SEASON_STATS_FAILED), so a watcher can import the season.
+//
 // Pace: deliberately slow (~1 page/min; PFR blocks clients above 20 req/min):
 // 25-40s between pages, a 15-min rest every 40 pages, 30 min between seasons,
 // and a hard stop on rate-limit pages or 3 failures in a row.
@@ -311,6 +315,23 @@ async function main() {
         if (!(await fetchGame(g, season, dir))) stillFailed++;
       }
       console.log(`  [${ts()}] retry pass: ${failed.length - stillFailed} recovered, ${stillFailed} still failing (see pbp-scrape-report.mjs)`);
+    }
+
+    // Once every game is in, fetch PFR's season tables (to check the stats
+    // derived from the play-by-play) in this same one-page-at-a-time session,
+    // then log a marker line that whoever is watching the log can act on.
+    const missing = games.filter(
+      (g) => !existsSync(path.join(dir, `${g.game_id}.csv`)) && !existsSync(path.join(dir, `${g.game_id}.none`)),
+    ).length;
+    if (missing) {
+      console.log(`  [${ts()}] SEASON_INCOMPLETE ${season}: ${missing} games missing`);
+    } else {
+      await sleep(BOX_DELAY_MS + Math.random() * BOX_JITTER_MS);
+      const r = spawnSync('node', [path.join(__dirname, 'scrape-pfr-season-stats.mjs'), String(season)],
+        { stdio: 'inherit' });
+      console.log(r.status === 0
+        ? `  [${ts()}] SEASON_READY ${season}`
+        : `  [${ts()}] SEASON_STATS_FAILED ${season} (exit ${r.status})`);
     }
 
     if (season !== TO) {

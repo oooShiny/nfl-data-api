@@ -116,6 +116,29 @@ def test_score_lag_after_touchdown_is_not_a_second_touchdown(tmp_path):
     assert df["touchdown"].to_list() == [True, False, True, False, False, False, True]
 
 
+def test_1987_score_jumps_next_to_a_touchdown_are_not_another_one(tmp_path):
+    base = dict(game_id="1987_13_KC_CIN", season="1987", week="13", game_type="REG",
+                home_team="CIN", away_team="KC", quarter="2", time="", down="", yds_to_go="",
+                location="", exp_pts_before="", exp_pts_after="", home_score="0",
+                boxscore_url="https://www.pro-football-reference.com/boxscores/198712060cin.htm")
+    rows = [
+        # The 6 lands on the play before the touchdown...
+        ("1", "6", "Bill Kenney pass incomplete intended for Stephone Paige"),
+        ("2", "7", "Bill Kenney pass complete to Stephone Paige for 24 yards, touchdown"),
+        # ...or on an offsetting penalty after the try.
+        ("3", "7", "Bill Kenney pass complete to Stephone Paige for 24 yards, touchdown"),
+        ("4", "7", "Nick Lowery kicks extra point no good"),
+        ("5", "13", "Penalty on Louis Breeden: Unnecessary Roughness (offset)"),
+        # A touchdown whose text is only the declined penalty still counts.
+        ("6", "13", "Christian Okoye middle for 3 yards"),
+        ("7", "19", "Penalty on CIN: Offside (declined)"),
+    ]
+    src = tmp_path / "1987.parquet"
+    pl.DataFrame([{**base, "play_seq": q, "away_score": a, "detail": d} for q, a, d in rows]).write_parquet(src)
+
+    assert clean_dataset("historical_pbp", src)["touchdown"].to_list() == [False, True, True, False, False, False, True]
+
+
 def test_load_fact_historical_plays_and_endpoint(tmp_path, monkeypatch):
     silver = tmp_path / "silver"
     (silver / "historical_pbp").mkdir(parents=True)
@@ -144,3 +167,16 @@ def test_load_fact_historical_plays_and_endpoint(tmp_path, monkeypatch):
         list_historical_plays(None, game_id=None, season=None, week=None, team=None, play_type=None,
                               posteam=None, player_id=None, limit=50, offset=0, db=con)
     con.close()
+
+
+def test_pfr_stl_is_the_cardinals_through_1987(tmp_path):
+    rows = _bronze_rows().with_columns(pl.lit("1987").alias("season"), pl.lit("1987_01_DAL_SLC").alias("game_id"),
+                                       pl.lit("SLC").alias("home_team"), pl.lit("DAL").alias("away_team"),
+                                       pl.Series("location", ["STL 30", "DAL 25", ""]))
+    src = tmp_path / "1987.parquet"
+    rows.write_parquet(src)
+    assert clean_dataset("historical_pbp", src)["yardline_side"].to_list() == ["SLC", "DAL", None]
+
+    rams = _bronze_rows().with_columns(pl.lit("STL").alias("home_team"), pl.Series("location", ["STL 30", "NWE 25", ""]))
+    rams.write_parquet(src)
+    assert clean_dataset("historical_pbp", src)["yardline_side"].to_list() == ["STL", "NE", None]
