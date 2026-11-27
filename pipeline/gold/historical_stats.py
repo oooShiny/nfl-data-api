@@ -348,7 +348,9 @@ FROM (
            NULL AS player_id,
            posteam AS side,
            unnest(['punts', 'punts_blocked']) AS stat,
-           unnest([1, 1]) AS value
+           -- PFR doesn't count a blocked punt as a punt (0 keeps the game
+           -- row for a punter whose only kick was blocked).
+           unnest([0, 1]) AS value
     FROM blocked_punt
     -- returns
     UNION ALL BY NAME
@@ -499,7 +501,9 @@ def _match_extra_names(con: duckdb.DuckDBPyConnection) -> None:
     con.unregister("_hist_name_ids_df")
 
 
-FIRST_BLOCKED_PUNT_SEASON = 1989
+# Seasons whose play-by-play text leaves out (nearly) every blocked punt:
+# 1987 has 2 and 1988 none, where PFR's season tables list 29 and 23.
+BLOCKED_PUNTS_UNRECORDED = (1987, 1988)
 
 
 def build_historical_stats(con: duckdb.DuckDBPyConnection) -> tuple[int, int, int]:
@@ -512,10 +516,9 @@ def build_historical_stats(con: duckdb.DuckDBPyConnection) -> tuple[int, int, in
               "fact_historical_team_season_stats"):
         con.execute(f"DELETE FROM {t}")
     con.execute(PLAYER_GAME_SQL)
-    # PFR's play-by-play text before 1989 never records a blocked punt
-    # (1988: PFR lists 23, the text has none), so 0 would be wrong, not known.
-    con.execute(f"UPDATE fact_historical_player_game_stats SET punts_blocked = NULL "
-                f"WHERE season < {FIRST_BLOCKED_PUNT_SEASON}")
+    # There 0 would be wrong, not known.
+    con.execute("UPDATE fact_historical_player_game_stats SET punts_blocked = NULL "
+                f"WHERE season IN {BLOCKED_PUNTS_UNRECORDED}")
     con.execute(PLAYER_SEASON_SQL)
     con.execute(TEAM_SEASON_SQL)
     for t in ("_hist_scores", "_hist_off", "_hist_raw", "_hist_name_ids", "_hist_events"):
