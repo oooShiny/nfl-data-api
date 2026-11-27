@@ -188,8 +188,9 @@ def test_defense_kicking_punting_and_return_lines():
     assert line("Terrell Davis", "carries", "fumbles", "fumbles_lost") == ("DEN", 4, 2, 2)
     assert line("Jason Elam", "fg_made", "fg_att", "fg_blocked", "fg_long", "fg_made_40_49", "fg_missed_50_59",
                 "pat_made", "pat_att") == ("DEN", 1, 2, 1, 43, 1, 1, 0, 1)
-    # Two punts with distances plus two blocked ones (both wordings).
-    assert line("Tom Rouen", "punts", "punt_yards", "punt_long", "punts_blocked") == ("DEN", 4, 95, 50, 2)
+    # Two punts with distances plus two blocked ones (both wordings), which
+    # PFR doesn't count as punts.
+    assert line("Tom Rouen", "punts", "punt_yards", "punt_long", "punts_blocked") == ("DEN", 2, 95, 50, 2)
     # The muff is a return of 0 yards and a fumble he recovered himself.
     assert line("Dave Meggett", "punt_returns", "punt_return_yards", "punt_return_tds", "fumbles", "fumbles_lost",
                 "fumble_recovery_own") == ("NE", 2, 60, 1, 1, 0, 1)
@@ -203,11 +204,11 @@ def test_defense_kicking_punting_and_return_lines():
                        ).fetchone() == ("DEN",)
 
 
-def test_blocked_punts_are_unknown_before_1989():
-    # PFR's 1988 text never records a blocked punt, so 0 would be a guess.
+def test_blocked_punts_are_unknown_in_1987_and_1988():
+    # PFR's 1987-88 text (nearly) never records a blocked punt, so 0 would be a guess.
     con = duckdb.connect()
     con.execute(SCHEMA_SQL)
-    for season in (1988, 1989):
+    for season in (1986, 1988, 1989):
         cols = dict(game_id=f"{season}_01_NE_DEN", play_seq=1, season=season, week=1, game_type="REG",
                     home_team="DEN", away_team="NE", posteam="DEN", defteam="NE", quarter=1, play_type="punt",
                     description="Mike Horan punts 40 yards", touchdown=False, two_point_attempt=False,
@@ -217,4 +218,4 @@ def test_blocked_punts_are_unknown_before_1989():
     build_historical_season_stats(con)
     for t in ("fact_historical_player_game_stats", "fact_historical_player_season_stats"):
         assert con.execute(f"SELECT season, punts, punts_blocked FROM {t} ORDER BY season").fetchall() == [
-            (1988, 1, None), (1989, 1, 0)]
+            (1986, 1, 0), (1988, 1, None), (1989, 1, 0)]
