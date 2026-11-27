@@ -499,6 +499,9 @@ def _match_extra_names(con: duckdb.DuckDBPyConnection) -> None:
     con.unregister("_hist_name_ids_df")
 
 
+FIRST_BLOCKED_PUNT_SEASON = 1989
+
+
 def build_historical_stats(con: duckdb.DuckDBPyConnection) -> tuple[int, int, int]:
     con.execute(_SCORES_SQL)
     con.execute(_PLAYS_SQL)
@@ -509,6 +512,10 @@ def build_historical_stats(con: duckdb.DuckDBPyConnection) -> tuple[int, int, in
               "fact_historical_team_season_stats"):
         con.execute(f"DELETE FROM {t}")
     con.execute(PLAYER_GAME_SQL)
+    # PFR's play-by-play text before 1989 never records a blocked punt
+    # (1988: PFR lists 23, the text has none), so 0 would be wrong, not known.
+    con.execute(f"UPDATE fact_historical_player_game_stats SET punts_blocked = NULL "
+                f"WHERE season < {FIRST_BLOCKED_PUNT_SEASON}")
     con.execute(PLAYER_SEASON_SQL)
     con.execute(TEAM_SEASON_SQL)
     for t in ("_hist_scores", "_hist_off", "_hist_raw", "_hist_name_ids", "_hist_events"):

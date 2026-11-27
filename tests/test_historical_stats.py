@@ -201,3 +201,20 @@ def test_defense_kicking_punting_and_return_lines():
     assert season == (1, 0, 2)
     assert con.execute("SELECT opponent FROM fact_historical_player_game_stats WHERE player_name = 'Ty Law'"
                        ).fetchone() == ("DEN",)
+
+
+def test_blocked_punts_are_unknown_before_1989():
+    # PFR's 1988 text never records a blocked punt, so 0 would be a guess.
+    con = duckdb.connect()
+    con.execute(SCHEMA_SQL)
+    for season in (1988, 1989):
+        cols = dict(game_id=f"{season}_01_NE_DEN", play_seq=1, season=season, week=1, game_type="REG",
+                    home_team="DEN", away_team="NE", posteam="DEN", defteam="NE", quarter=1, play_type="punt",
+                    description="Mike Horan punts 40 yards", touchdown=False, two_point_attempt=False,
+                    punter="Mike Horan", home_score=0, away_score=0)
+        con.execute(f"INSERT INTO fact_historical_plays ({', '.join(cols)}) VALUES ({', '.join('?' * len(cols))})",
+                    list(cols.values()))
+    build_historical_season_stats(con)
+    for t in ("fact_historical_player_game_stats", "fact_historical_player_season_stats"):
+        assert con.execute(f"SELECT season, punts, punts_blocked FROM {t} ORDER BY season").fetchall() == [
+            (1988, 1, None), (1989, 1, 0)]
