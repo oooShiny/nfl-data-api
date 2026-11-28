@@ -34,7 +34,8 @@ Conventions
 - season is the year the season started (the Feb 2024 Super Bowl is season 2023).
 - season_type is 'REG' or 'POST' (fact_player_season_stats also has 'REG+POST').
   dim_games.game_type is REG, WC, DIV, CON, or SB.
-- Play-by-play (fact_plays and children) covers 1999 onward. Games (dim_games) go back to
+- v_plays has every play in one shape: 1999+ from fact_plays and pre-1999 from
+  fact_historical_plays. Play-by-play (fact_plays and children) covers 1999 onward. Games (dim_games) go back to
   1970 with no missing seasons. Scoring-play summaries for every season are in fact_game_scoring, and
   pre-1999 full play-by-play (being back-filled season by season) is in fact_historical_plays.
 - EPA = expected points added, WPA = win probability added, CPOE = completion % over expected.
@@ -62,10 +63,15 @@ TABLES: dict[str, dict[str, str]] = {
         "notes": "",
     },
     # --- play-by-play ---
+    "v_plays": {
+        "description": "Every play in one shape, 1999+ (nflverse, fact_plays) and pre-1999 (PFR, fact_historical_plays): down, distance, field position, clock, score before and after, play_type, yards, description, EP/EPA, and each player role as <role>_player_id / <role>_player_name (passer, rusher, receiver, interception, sack, kicker, punter, returner, tackler_1, tackler_2, forced_fumble, fumble_recovery, penalty). Start here for play-level questions across eras.",
+        "coverage": "1999-present plus the pre-1999 seasons back-filled so far (check SELECT DISTINCT season).",
+        "notes": "A view. Key (game_id, play_id); before 1999 play_id is PFR's play order (play_seq). source = 'nflverse' or 'pfr'. Before 1999: no wp/wpa, air/yac EPA, series or turnover flags (NULL); ep/epa are PFR's expected points model, not nflfastR's, so compare EPA across eras with care; posteam is inferred; clock and game_seconds_remaining are NULL on most plays (PFR gives the time only on some). home_score/away_score are after the play, posteam_score/defteam_score before it. Team codes: current franchise codes from 1999 (LV, LAC, LA), codes of the time before (OAK, SLC, PHX, ...), as in dim_games. Player ids are gsis_ids; pre-1999 ones matched by name through rosters. Filter on season first: it's a union over 1.8M rows. Extra pfr-only columns: game_type, yardline, location_raw, exp_pts_after, boxscore_url.",
+    },
     "fact_plays": {
         "description": "Every play: down, distance, field position, score, play_type, yards gained, EP/EPA, WP/WPA, drive and series info.",
-        "coverage": "1999-present.",
-        "notes": "Key (game_id, play_id). posteam = offense, defteam = defense. yardline_100 = yards from opponent end zone. play_type in pass, run, punt, kickoff, field_goal, extra_point, qb_kneel, qb_spike, no_play.",
+        "coverage": "1999-present. v_plays combines it with pre-1999 plays.",
+        "notes": "Key (game_id, play_id). Has the description, clock, home/away score after the play and each player role (<role>_player_id/_name). posteam = offense, defteam = defense. yardline_100 = yards from opponent end zone. play_type in pass, run, punt, kickoff, field_goal, extra_point, qb_kneel, qb_spike, no_play.",
     },
     "fact_pass_plays": {
         "description": "Pass-play detail joined 1:1 to fact_plays: passer, receiver, air yards, YAC, completion/INT/sack flags, CPOE.",
@@ -99,7 +105,7 @@ TABLES: dict[str, dict[str, str]] = {
     },
     "fact_historical_plays": {
         "description": "Full play-by-play for pre-1999 games from Pro-Football-Reference: down, distance, field position, running score, description, PFR expected points, plus play_type/yards_gained/touchdown and player names parsed from the description.",
-        "coverage": "Pre-1999, back-filled one season at a time from 1998 backward; check SELECT DISTINCT season. Use fact_plays for 1999+.",
+        "coverage": "Pre-1999, back-filled one season at a time from 1998 backward; check SELECT DISTINCT season. Use fact_plays for 1999+, or v_plays for both in one shape.",
         "notes": "Key is (game_id, play_seq). Player columns (passer, rusher, receiver, ...) are names parsed from the description; each has a matching *_id gsis_id (passer_id, rusher_id, ...) matched by name against fact_rosters for the two teams that season, NULL when no single player matches (about 99.7% of names match). posteam/defteam are inferred (PFR has no possession column) from PFR's expected points, scores and field position; about 99.8% of plays are assigned (98.7% in 1993, which has no expected points in the source), with posteam = receiving team on kickoffs and kicking team on punts/FG/XP, as in fact_plays. drive numbers possessions from 1 within each game (new drive on each kickoff, change of posteam, and at the half and overtime). yardline_100 is distance to the opponent's goal line. quarter 5 = overtime. clock is often NULL in the source. Team codes match dim_games historical codes.",
     },
     "fact_historical_player_game_stats": {

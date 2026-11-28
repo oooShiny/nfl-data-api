@@ -60,31 +60,6 @@ class Game(BaseModel):
     boxscore_url: str | None = None
 
 
-class Play(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-    play_id: int | None = None
-    game_id: str | None = None
-    season: int | None = None
-    week: int | None = None
-    game_date: date | None = None
-    quarter: int | None = None
-    down: int | None = None
-    ydstogo: int | None = None
-    yardline_100: int | None = None
-    posteam: str | None = None
-    defteam: str | None = None
-    posteam_score: int | None = None
-    defteam_score: int | None = None
-    play_type: str | None = None
-    yards_gained: int | None = None
-    touchdown: bool | None = None
-    turnover: bool | None = None
-    penalty: bool | None = None
-    first_down: bool | None = None
-    epa: float | None = None
-    wpa: float | None = None
-
-
 class PlayerGameStats(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     player_id: str | None = None

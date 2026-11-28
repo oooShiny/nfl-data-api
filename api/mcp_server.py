@@ -143,6 +143,10 @@ def list_tables() -> dict[str, Any]:
     cur = _cursor()
     try:
         sizes = dict(cur.execute("SELECT table_name, estimated_size FROM duckdb_tables()").fetchall())
+        # Views are listed when the catalog describes them (e.g. v_plays).
+        for (view,) in cur.execute("SELECT view_name FROM duckdb_views() WHERE NOT internal").fetchall():
+            if view in TABLES:
+                sizes[view] = None
     finally:
         cur.close()
     tables = []
@@ -168,6 +172,8 @@ def describe_table(table: str, sample_rows: int = 3) -> dict[str, Any]:
     cur = _cursor()
     try:
         known = {r[0] for r in cur.execute("SELECT table_name FROM duckdb_tables()").fetchall()}
+        known |= {r[0] for r in cur.execute("SELECT view_name FROM duckdb_views() WHERE NOT internal").fetchall()
+                  if r[0] in TABLES}
         if table not in known:
             raise ToolError(f"Unknown table {table!r}. Call list_tables for valid names.")
         columns = [

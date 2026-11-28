@@ -219,8 +219,16 @@ CREATE TABLE IF NOT EXISTS fact_historical_plays (
     penalized_player        VARCHAR,
     penalized_player_id     VARCHAR,
     boxscore_url            VARCHAR,
+    posteam_score           SMALLINT,     -- score before the play, like fact_plays
+    defteam_score           SMALLINT,
+    game_seconds_remaining  INTEGER,      -- from clock (NULL when PFR has no time)
+    half_seconds_remaining  INTEGER,
     PRIMARY KEY (game_id, play_seq)
 );
+ALTER TABLE fact_historical_plays ADD COLUMN IF NOT EXISTS posteam_score SMALLINT;
+ALTER TABLE fact_historical_plays ADD COLUMN IF NOT EXISTS defteam_score SMALLINT;
+ALTER TABLE fact_historical_plays ADD COLUMN IF NOT EXISTS game_seconds_remaining INTEGER;
+ALTER TABLE fact_historical_plays ADD COLUMN IF NOT EXISTS half_seconds_remaining INTEGER;
 -- For databases created before possession was inferred.
 ALTER TABLE fact_historical_plays ADD COLUMN IF NOT EXISTS posteam VARCHAR;
 ALTER TABLE fact_historical_plays ADD COLUMN IF NOT EXISTS defteam VARCHAR;
@@ -483,8 +491,79 @@ CREATE TABLE IF NOT EXISTS fact_plays (
     series_success      BOOLEAN,
     drive               SMALLINT,
     sp                  BOOLEAN,          -- scoring play
+    season_type         VARCHAR,          -- REG / POST
+    home_team           VARCHAR,
+    away_team           VARCHAR,
+    clock               VARCHAR,          -- 'MM:SS' left in the quarter
+    yardline_side       VARCHAR,          -- whose side of the field the ball is on
+    home_score          SMALLINT,         -- running score after the play
+    away_score          SMALLINT,
+    description         VARCHAR,
+    two_point_attempt   BOOLEAN,
+    passer_player_id    VARCHAR,
+    passer_player_name  VARCHAR,
+    rusher_player_id    VARCHAR,
+    rusher_player_name  VARCHAR,
+    receiver_player_id  VARCHAR,
+    receiver_player_name VARCHAR,
+    interception_player_id VARCHAR,
+    interception_player_name VARCHAR,
+    sack_player_id      VARCHAR,
+    sack_player_name    VARCHAR,
+    kicker_player_id    VARCHAR,
+    kicker_player_name  VARCHAR,
+    punter_player_id    VARCHAR,
+    punter_player_name  VARCHAR,
+    returner_player_id  VARCHAR,
+    returner_player_name VARCHAR,
+    tackler_1_player_id VARCHAR,
+    tackler_1_player_name VARCHAR,
+    tackler_2_player_id VARCHAR,
+    tackler_2_player_name VARCHAR,
+    forced_fumble_player_id VARCHAR,
+    forced_fumble_player_name VARCHAR,
+    fumble_recovery_player_id VARCHAR,
+    fumble_recovery_player_name VARCHAR,
+    penalty_player_id   VARCHAR,
+    penalty_player_name VARCHAR,
     PRIMARY KEY (game_id, play_id)
 );
+-- For databases created before these columns.
+ALTER TABLE fact_plays ADD COLUMN IF NOT EXISTS season_type VARCHAR;
+ALTER TABLE fact_plays ADD COLUMN IF NOT EXISTS home_team VARCHAR;
+ALTER TABLE fact_plays ADD COLUMN IF NOT EXISTS away_team VARCHAR;
+ALTER TABLE fact_plays ADD COLUMN IF NOT EXISTS clock VARCHAR;
+ALTER TABLE fact_plays ADD COLUMN IF NOT EXISTS yardline_side VARCHAR;
+ALTER TABLE fact_plays ADD COLUMN IF NOT EXISTS home_score SMALLINT;
+ALTER TABLE fact_plays ADD COLUMN IF NOT EXISTS away_score SMALLINT;
+ALTER TABLE fact_plays ADD COLUMN IF NOT EXISTS description VARCHAR;
+ALTER TABLE fact_plays ADD COLUMN IF NOT EXISTS two_point_attempt BOOLEAN;
+ALTER TABLE fact_plays ADD COLUMN IF NOT EXISTS passer_player_id VARCHAR;
+ALTER TABLE fact_plays ADD COLUMN IF NOT EXISTS passer_player_name VARCHAR;
+ALTER TABLE fact_plays ADD COLUMN IF NOT EXISTS rusher_player_id VARCHAR;
+ALTER TABLE fact_plays ADD COLUMN IF NOT EXISTS rusher_player_name VARCHAR;
+ALTER TABLE fact_plays ADD COLUMN IF NOT EXISTS receiver_player_id VARCHAR;
+ALTER TABLE fact_plays ADD COLUMN IF NOT EXISTS receiver_player_name VARCHAR;
+ALTER TABLE fact_plays ADD COLUMN IF NOT EXISTS interception_player_id VARCHAR;
+ALTER TABLE fact_plays ADD COLUMN IF NOT EXISTS interception_player_name VARCHAR;
+ALTER TABLE fact_plays ADD COLUMN IF NOT EXISTS sack_player_id VARCHAR;
+ALTER TABLE fact_plays ADD COLUMN IF NOT EXISTS sack_player_name VARCHAR;
+ALTER TABLE fact_plays ADD COLUMN IF NOT EXISTS kicker_player_id VARCHAR;
+ALTER TABLE fact_plays ADD COLUMN IF NOT EXISTS kicker_player_name VARCHAR;
+ALTER TABLE fact_plays ADD COLUMN IF NOT EXISTS punter_player_id VARCHAR;
+ALTER TABLE fact_plays ADD COLUMN IF NOT EXISTS punter_player_name VARCHAR;
+ALTER TABLE fact_plays ADD COLUMN IF NOT EXISTS returner_player_id VARCHAR;
+ALTER TABLE fact_plays ADD COLUMN IF NOT EXISTS returner_player_name VARCHAR;
+ALTER TABLE fact_plays ADD COLUMN IF NOT EXISTS tackler_1_player_id VARCHAR;
+ALTER TABLE fact_plays ADD COLUMN IF NOT EXISTS tackler_1_player_name VARCHAR;
+ALTER TABLE fact_plays ADD COLUMN IF NOT EXISTS tackler_2_player_id VARCHAR;
+ALTER TABLE fact_plays ADD COLUMN IF NOT EXISTS tackler_2_player_name VARCHAR;
+ALTER TABLE fact_plays ADD COLUMN IF NOT EXISTS forced_fumble_player_id VARCHAR;
+ALTER TABLE fact_plays ADD COLUMN IF NOT EXISTS forced_fumble_player_name VARCHAR;
+ALTER TABLE fact_plays ADD COLUMN IF NOT EXISTS fumble_recovery_player_id VARCHAR;
+ALTER TABLE fact_plays ADD COLUMN IF NOT EXISTS fumble_recovery_player_name VARCHAR;
+ALTER TABLE fact_plays ADD COLUMN IF NOT EXISTS penalty_player_id VARCHAR;
+ALTER TABLE fact_plays ADD COLUMN IF NOT EXISTS penalty_player_name VARCHAR;
 
 CREATE TABLE IF NOT EXISTS fact_pass_plays (
     game_id             VARCHAR,
@@ -1449,4 +1528,63 @@ LEFT JOIN name_resolution nr_r
     ON kp.return_player_name = nr_r.raw_name
    AND nr_r.source = 'fact_kick_plays.return_player_name'
    AND nr_r.method != 'rejected';
+
+-- ─────────────────────────────────────────────
+-- Every play, 1999+ (nflverse) and pre-1999 (PFR), in one shape
+-- ─────────────────────────────────────────────
+
+-- Columns use fact_plays' names; (game_id, play_id) is the key in both eras
+-- (play_id = play_seq before 1999). Fields one source lacks are NULL: no win
+-- probability, air yards or series before 1999; ep/epa there are PFR's
+-- expected points (source = 'pfr'), not nflfastR's. Team codes follow each
+-- table: current codes from 1999, codes of the time before.
+CREATE OR REPLACE VIEW v_plays AS
+SELECT 'nflverse' AS source, game_id, play_id, season, season_type, week, game_date, home_team, away_team,
+    posteam, defteam, drive, quarter, clock, game_seconds_remaining, half_seconds_remaining,
+    down, ydstogo, yardline_side, yardline_100, home_score, away_score, posteam_score, defteam_score,
+    play_type, description, yards_gained, touchdown, two_point_attempt, ep, epa,
+    passer_player_id, passer_player_name,
+    rusher_player_id, rusher_player_name,
+    receiver_player_id, receiver_player_name,
+    interception_player_id, interception_player_name,
+    sack_player_id, sack_player_name,
+    kicker_player_id, kicker_player_name,
+    punter_player_id, punter_player_name,
+    returner_player_id, returner_player_name,
+    tackler_1_player_id, tackler_1_player_name,
+    tackler_2_player_id, tackler_2_player_name,
+    forced_fumble_player_id, forced_fumble_player_name,
+    fumble_recovery_player_id, fumble_recovery_player_name,
+    penalty_player_id, penalty_player_name,
+    quarter_seconds_remaining, score_differential, turnover, penalty, penalty_yards, first_down,
+    wp, wpa, air_epa, yac_epa, comp_air_epa, comp_yac_epa, qb_epa, xyac_epa, series, series_success, sp,
+    NULL::VARCHAR AS game_type, NULL::SMALLINT AS yardline, NULL::VARCHAR AS location_raw,
+    NULL::DOUBLE AS exp_pts_after, NULL::VARCHAR AS boxscore_url
+FROM fact_plays
+UNION ALL
+SELECT 'pfr', h.game_id, h.play_seq, h.season, CASE WHEN h.game_type = 'REG' THEN 'REG' ELSE 'POST' END,
+    h.week, g.gameday, h.home_team, h.away_team,
+    h.posteam, h.defteam, h.drive, h.quarter, h.clock, h.game_seconds_remaining, h.half_seconds_remaining,
+    h.down, h.ydstogo, h.yardline_side, h.yardline_100, h.home_score, h.away_score, h.posteam_score, h.defteam_score,
+    h.play_type, h.description, h.yards_gained, h.touchdown, h.two_point_attempt,
+    h.exp_pts_before, h.exp_pts_after - h.exp_pts_before,
+    h.passer_id AS passer_player_id, h.passer AS passer_player_name,
+    h.rusher_id AS rusher_player_id, h.rusher AS rusher_player_name,
+    h.receiver_id AS receiver_player_id, h.receiver AS receiver_player_name,
+    h.interceptor_id AS interception_player_id, h.interceptor AS interception_player_name,
+    h.sacker_id AS sack_player_id, h.sacker AS sack_player_name,
+    h.kicker_id AS kicker_player_id, h.kicker AS kicker_player_name,
+    h.punter_id AS punter_player_id, h.punter AS punter_player_name,
+    h.returner_id AS returner_player_id, h.returner AS returner_player_name,
+    h.tackler_1_id AS tackler_1_player_id, h.tackler_1 AS tackler_1_player_name,
+    h.tackler_2_id AS tackler_2_player_id, h.tackler_2 AS tackler_2_player_name,
+    h.forced_fumble_player_id AS forced_fumble_player_id, h.forced_fumble_player AS forced_fumble_player_name,
+    h.fumble_recovery_player_id AS fumble_recovery_player_id, h.fumble_recovery_player AS fumble_recovery_player_name,
+    h.penalized_player_id AS penalty_player_id, h.penalized_player AS penalty_player_name,
+    NULL, h.posteam_score - h.defteam_score, NULL, h.play_type = 'no_play' OR h.description LIKE '%Penalty on%',
+    NULL, NULL,
+    NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+    h.game_type, h.yardline, h.location_raw, h.exp_pts_after, h.boxscore_url
+FROM fact_historical_plays h
+LEFT JOIN dim_games g ON g.game_id = h.game_id;
 """
