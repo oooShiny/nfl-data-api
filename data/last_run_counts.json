@@ -1,11 +1,11 @@
 {
-  "run_at": "2026-11-28T01:10:52.805786+00:00",
+  "run_at": "2026-11-28T01:32:34.175722+00:00",
   "row_counts": {
     "dim_players": 24872,
     "dim_teams": 39,
     "dim_games": 13957,
     "fact_game_scoring": 107725,
-    "fact_historical_plays": 561026,
+    "fact_historical_plays": 601663,
     "fact_plays": 1308791,
     "fact_pass_plays": 535593,
     "fact_rush_plays": 393740,
