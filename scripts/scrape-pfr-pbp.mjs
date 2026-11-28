@@ -12,7 +12,8 @@
 // Output: one CSV per game at data/scraped/pfr_pbp/<season>/<game_id>.csv
 // (gitignored), plus every other table on the same page (box score, defense,
 // returns, kicking, team stats, starters, drives: whatever PFR has for the
-// game) as data/scraped/pfr_boxscore/<season>/<game_id>.json, from the same
+// game, plus the scorebox header as "_scorebox": stadium, attendance, start
+// time, coaches) as data/scraped/pfr_boxscore/<season>/<game_id>.json, from the same
 // page load, to check stats derived from the play-by-play game by game. A game whose boxscore has no play-by-play table gets an empty
 // <game_id>.none marker so it isn't retried. Existing files = done, so the
 // script is resumable: just restart it.
@@ -172,6 +173,19 @@ async function scrapeBoxscore(url) {
             if (a) c.player_href = a.getAttribute('href');
             return c;
           });
+      }
+      // The scorebox header isn't a table: date, start time, stadium,
+      // attendance and time of game lines, plus each team's coach.
+      const sb = document.querySelector('.scorebox');
+      if (sb) {
+        tables._scorebox = [{
+          meta: Array.from(sb.querySelectorAll('.scorebox_meta > div')).map(d => (d.innerText || d.textContent).trim()),
+          teams: Array.from(sb.querySelectorAll(':scope > div')).filter(d => d.querySelector('strong a[href*="/teams/"]')).map(d => ({
+            team_href: d.querySelector('strong a[href*="/teams/"]').getAttribute('href'),
+            coach: ((d.querySelector('a[href^="/coaches/"]') || {}).textContent || '').trim(),
+            coach_href: (d.querySelector('a[href^="/coaches/"]') || { getAttribute: () => '' }).getAttribute('href') || '',
+          })),
+        }];
       }
     } catch (e) {
       tables._error = String(e);
