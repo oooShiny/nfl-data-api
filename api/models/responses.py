@@ -57,6 +57,10 @@ class Game(BaseModel):
     spread_line: float | None = None
     total_line: float | None = None
     div_game: bool | None = None
+    home_coach: str | None = None
+    away_coach: str | None = None
+    humidity: int | None = None
+    attendance: int | None = None
     boxscore_url: str | None = None
 
 

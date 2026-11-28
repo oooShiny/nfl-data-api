@@ -23,7 +23,7 @@ _NFLVERSE_NUM = [
     "play_id", "season", "week", "qtr", "game_seconds_remaining", "half_seconds_remaining",
     "quarter_seconds_remaining", "down", "ydstogo", "yardline_100", "posteam_score", "defteam_score",
     "score_differential", "yards_gained", "touchdown", "interception", "fumble_lost", "penalty", "penalty_yards",
-    "first_down", "ep", "epa", "wp", "wpa", "air_epa", "yac_epa", "comp_air_epa", "comp_yac_epa", "qb_epa",
+    "first_down", "ep", "epa", "wp", "wpa", "vegas_wp", "vegas_wpa", "air_epa", "yac_epa", "comp_air_epa", "comp_yac_epa", "qb_epa",
     "xyac_epa", "series", "series_success", "drive", "sp", "total_home_score", "total_away_score",
     "two_point_attempt",
 ]

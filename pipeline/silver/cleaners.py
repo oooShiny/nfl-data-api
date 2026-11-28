@@ -447,6 +447,59 @@ def _historical_rosters(seasons: list[int]) -> pl.DataFrame | None:
                                                 pl.col("full_name").alias("player_name")) for f in files])
 
 
+def _clean_historical_game_info(df: pl.DataFrame) -> pl.DataFrame:
+    """Parse PFR game-info strings into typed columns.
+
+    "Vegas Line" is "<favorite's full name> -3.5" or "Pick"; the favorite is
+    matched to a team code in the gold load, which has the game's two teams.
+    Weather is "69 degrees, relative humidity 62%, wind 12 mph[, wind chill
+    28]" (absent in domes). The scorebox lines look like "Stadium: Anaheim
+    Stadium", "Attendance: 52,522", "Start Time: 1:00pm", "Time of Game: 3:03".
+    """
+    def num(col: str, pattern: str, dtype=pl.Int16) -> pl.Expr:
+        return pl.col(col).str.extract(pattern, 1).str.replace_all(",", "").cast(dtype, strict=False)
+
+    def meta(label: str) -> pl.Expr:
+        return pl.col("scorebox_meta").str.extract(rf"(?m)^{label}:\s*(.+?)\s*$", 1)
+
+    from pipeline.bronze.local_sources import GAME_INFO_COLUMNS
+    # base_clean drops all-null columns (e.g. no scorebox before Nov 2026 pages).
+    df = df.with_columns(pl.lit(None, pl.Utf8).alias(c) for c in GAME_INFO_COLUMNS if c not in df.columns)
+    line = pl.col("vegas_line").str.strip_chars()
+    start = meta("Start Time").str.to_lowercase().str.extract_groups(r"^(\d{1,2}):(\d{2})\s*([ap])m")
+    hour = start.struct.field("1").cast(pl.Int8, strict=False)
+    hour24 = (hour % 12) + pl.when(start.struct.field("3") == "p").then(12).otherwise(0)
+    return df.select(
+        "game_id",
+        pl.col("season").cast(pl.Int16),
+        pl.col("roof").str.strip_chars(),
+        pl.col("surface").str.strip_chars(),
+        pl.col("weather"),
+        num("weather", r"(-?\d+) degrees").alias("temp"),
+        num("weather", r"relative humidity (\d+)%").alias("humidity"),
+        num("weather", r"wind (\d+) mph").alias("wind"),
+        num("weather", r"wind chill (-?\d+)").alias("wind_chill"),
+        pl.when(line == "Pick").then(None)
+          .otherwise(line.str.extract(r"^(.+?)\s+-?\d+(?:\.\d+)?$", 1)).alias("favorite"),
+        pl.when(line == "Pick").then(0.0)
+          .otherwise(line.str.extract(r"\s(-?\d+(?:\.\d+)?)$", 1).cast(pl.Float32, strict=False).abs())
+          .alias("favorite_by"),
+        num("over_under", r"^(\d+(?:\.\d+)?)", pl.Float32).alias("total_line"),
+        pl.col("over_under").str.extract(r"\((over|under|push)\)", 1).alias("total_result"),
+        pl.col("won_toss"),
+        meta("Stadium").alias("stadium"),
+        num("scorebox_meta", r"(?m)^Attendance:\s*([\d,]+)", pl.Int32).alias("attendance"),
+        pl.when(hour.is_not_null())
+          .then(pl.format("{}:{}", hour24.cast(pl.Utf8).str.zfill(2), start.struct.field("2")))
+          .alias("start_time"),
+        meta("Time of Game").alias("game_duration"),
+        pl.col("team1_href").str.extract(r"/teams/(\w+)/", 1).alias("team1_pfr"),
+        "team1_coach",
+        pl.col("team2_href").str.extract(r"/teams/(\w+)/", 1).alias("team2_pfr"),
+        "team2_coach",
+    )
+
+
 _SPECIFIC_CLEANERS = {
     "schedules": _clean_schedules,
     "players": _clean_players,
@@ -456,6 +509,7 @@ _SPECIFIC_CLEANERS = {
     "historical_gamelogs": _clean_historical_gamelogs,
     "historical_scoring": _clean_historical_scoring,
     "historical_pbp": _clean_historical_pbp,
+    "historical_game_info": _clean_historical_game_info,
     "nfl_elo": _clean_elo,
 }
 

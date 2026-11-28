@@ -5,6 +5,7 @@ releases and live on an external volume. Import is a no-op if the source
 paths aren't mounted, so `nfl run` still works on machines without them.
 """
 
+import json
 import re
 from pathlib import Path
 
@@ -18,6 +19,7 @@ from pipeline.config import (
     EXTERNAL_SCORING_DIR,
     NFL_ELO_URL,
     SCORING_MAX_SEASON,
+    SCRAPED_BOXSCORE_DIR,
     SCRAPED_PBP_DIR,
 )
 
@@ -136,6 +138,67 @@ def import_historical_pbp(force: bool = False) -> int:
     return written
 
 
+# game_info labels on PFR boxscore pages -> bronze column names.
+_GAME_INFO_KEYS = {
+    "Roof": "roof", "Surface": "surface", "Weather": "weather", "Vegas Line": "vegas_line",
+    "Over/Under": "over_under", "Won Toss": "won_toss", "Super Bowl MVP": "super_bowl_mvp",
+}
+GAME_INFO_COLUMNS = [
+    "game_id", "season", *_GAME_INFO_KEYS.values(), "scorebox_meta",
+    "team1_href", "team1_coach", "team2_href", "team2_coach",
+]
+
+
+def _game_info_row(game_id: str, season: str, tables: dict) -> dict:
+    row = {c: None for c in GAME_INFO_COLUMNS}
+    row["game_id"], row["season"] = game_id, season
+    for r in tables.get("game_info") or []:
+        key = _GAME_INFO_KEYS.get((r.get("info") or "").rstrip("*"))
+        if key:
+            row[key] = r.get("stat")
+    box = (tables.get("_scorebox") or [None])[0]
+    if box:
+        row["scorebox_meta"] = "\n".join(box.get("meta") or []) or None
+        for i, team in enumerate((box.get("teams") or [])[:2], start=1):
+            row[f"team{i}_href"] = team.get("team_href") or None
+            row[f"team{i}_coach"] = team.get("coach") or None
+    return row
+
+
+def import_historical_game_info(force: bool = False) -> int:
+    """Combine the game-info and scorebox parts of scraped PFR boxscore pages
+    (data/scraped/pfr_boxscore/<season>/<game_id>.json) into bronze parquet,
+    one per season: Vegas line, over/under, roof, surface, weather, and (pages
+    scraped since Nov 2026) stadium, attendance, start time and coaches.
+
+    Not every game has a page saved (the scraper only started keeping them
+    partway through 1988), so a season is written with whatever games it has,
+    and re-written when any page is newer than the parquet.
+    """
+    if not SCRAPED_BOXSCORE_DIR.exists():
+        console.print("  [dim]historical_game_info: no scraped boxscores, skipping[/dim]")
+        return 0
+
+    dst_dir = BRONZE_DIR / "historical_game_info"
+    dst_dir.mkdir(parents=True, exist_ok=True)
+
+    written = 0
+    for season_dir in sorted(p for p in SCRAPED_BOXSCORE_DIR.iterdir() if p.is_dir() and p.name.isdigit()):
+        pages = sorted(season_dir.glob("*.json"))
+        if not pages:
+            continue
+        dst = dst_dir / f"{season_dir.name}.parquet"
+        if not force and dst.exists() and dst.stat().st_mtime >= max(p.stat().st_mtime for p in pages):
+            continue
+        rows = [_game_info_row(p.stem, season_dir.name, json.loads(p.read_text())) for p in pages]
+        pl.DataFrame(rows, schema={c: pl.Utf8 for c in GAME_INFO_COLUMNS}).write_parquet(dst, compression="zstd")
+        written += 1
+
+    if written:
+        console.print(f"  [green]✓[/green] historical_game_info: {written} season files imported")
+    return written
+
+
 def import_elo(force: bool = False) -> int:
     """Download FiveThirtyEight's game-by-game Elo ratings (1920-2022) into bronze."""
     dst_dir = BRONZE_DIR / "nfl_elo"
@@ -158,6 +221,7 @@ def import_local_sources(force: bool = False) -> dict[str, int]:
         "historical_gamelogs": import_gamelogs(force=force),
         "historical_scoring": import_scoring(force=force),
         "historical_pbp": import_historical_pbp(force=force),
+        "historical_game_info": import_historical_game_info(force=force),
         "nfl_elo": import_elo(force=force),
     }
     total = sum(results.values())

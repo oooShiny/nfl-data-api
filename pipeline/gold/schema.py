@@ -93,11 +93,16 @@ CREATE TABLE IF NOT EXISTS dim_games (
     pff             INTEGER,
     espn            VARCHAR,
     ftn             INTEGER,
-    -- Pre-1999 games (1970-1998, from Pro-Football-Reference; 2000 season
-    -- missing from source) are merged in here too, with all of the columns
-    -- above NULL except this PFR boxscore link.
-    boxscore_url    VARCHAR
+    -- Pre-1999 games (1970-1998, from Pro-Football-Reference) are merged in
+    -- here too. For them the nflverse-only columns are NULL; roof, surface,
+    -- temp, wind, spread_line, total_line, weekday (and, where the scorebox
+    -- was saved, stadium, gametime, coaches) come from the PFR boxscore page.
+    boxscore_url    VARCHAR,
+    humidity        SMALLINT,             -- % (PFR boxscores, pre-1999 only)
+    attendance      INTEGER               -- (PFR boxscores, pre-1999 only)
 );
+ALTER TABLE dim_games ADD COLUMN IF NOT EXISTS humidity SMALLINT;
+ALTER TABLE dim_games ADD COLUMN IF NOT EXISTS attendance INTEGER;
 
 -- One row per scoring event (a touchdown's PAT/2-pt try is folded into its
 -- row), coarser than fact_plays. source = 'pfr': PFR scoring summaries,
@@ -223,8 +228,17 @@ CREATE TABLE IF NOT EXISTS fact_historical_plays (
     defteam_score           SMALLINT,
     game_seconds_remaining  INTEGER,      -- from clock (NULL when PFR has no time)
     half_seconds_remaining  INTEGER,
+    -- Our model (pipeline/gold/win_probability.py), team with the ball:
+    wp                      FLOAT,        -- win probability before the play, no pregame spread
+    wpa                     FLOAT,
+    vegas_wp                FLOAT,        -- with the Vegas line (or an Elo-based spread)
+    vegas_wpa               FLOAT,
     PRIMARY KEY (game_id, play_seq)
 );
+ALTER TABLE fact_historical_plays ADD COLUMN IF NOT EXISTS wp FLOAT;
+ALTER TABLE fact_historical_plays ADD COLUMN IF NOT EXISTS wpa FLOAT;
+ALTER TABLE fact_historical_plays ADD COLUMN IF NOT EXISTS vegas_wp FLOAT;
+ALTER TABLE fact_historical_plays ADD COLUMN IF NOT EXISTS vegas_wpa FLOAT;
 ALTER TABLE fact_historical_plays ADD COLUMN IF NOT EXISTS posteam_score SMALLINT;
 ALTER TABLE fact_historical_plays ADD COLUMN IF NOT EXISTS defteam_score SMALLINT;
 ALTER TABLE fact_historical_plays ADD COLUMN IF NOT EXISTS game_seconds_remaining INTEGER;
@@ -481,6 +495,8 @@ CREATE TABLE IF NOT EXISTS fact_plays (
     epa                 FLOAT,            -- expected points added
     wp                  FLOAT,            -- win probability before
     wpa                 FLOAT,            -- win probability added
+    vegas_wp            FLOAT,            -- win probability with the pregame spread
+    vegas_wpa           FLOAT,
     air_epa             FLOAT,
     yac_epa             FLOAT,
     comp_air_epa        FLOAT,
@@ -529,6 +545,8 @@ CREATE TABLE IF NOT EXISTS fact_plays (
     PRIMARY KEY (game_id, play_id)
 );
 -- For databases created before these columns.
+ALTER TABLE fact_plays ADD COLUMN IF NOT EXISTS vegas_wp FLOAT;
+ALTER TABLE fact_plays ADD COLUMN IF NOT EXISTS vegas_wpa FLOAT;
 ALTER TABLE fact_plays ADD COLUMN IF NOT EXISTS season_type VARCHAR;
 ALTER TABLE fact_plays ADD COLUMN IF NOT EXISTS home_team VARCHAR;
 ALTER TABLE fact_plays ADD COLUMN IF NOT EXISTS away_team VARCHAR;
@@ -1534,9 +1552,9 @@ LEFT JOIN name_resolution nr_r
 -- ─────────────────────────────────────────────
 
 -- Columns use fact_plays' names; (game_id, play_id) is the key in both eras
--- (play_id = play_seq before 1999). Fields one source lacks are NULL: no win
--- probability, air yards or series before 1999; ep/epa there are PFR's
--- expected points (source = 'pfr'), not nflfastR's. Team codes follow each
+-- (play_id = play_seq before 1999). Fields one source lacks are NULL: no air
+-- yards or series before 1999; ep/epa there are PFR's expected points and
+-- wp/vegas_wp our model's (source = 'pfr'), not nflfastR's. Team codes follow each
 -- table: current codes from 1999, codes of the time before.
 CREATE OR REPLACE VIEW v_plays AS
 SELECT 'nflverse' AS source, game_id, play_id, season, season_type, week, game_date, home_team, away_team,
@@ -1557,7 +1575,8 @@ SELECT 'nflverse' AS source, game_id, play_id, season, season_type, week, game_d
     fumble_recovery_player_id, fumble_recovery_player_name,
     penalty_player_id, penalty_player_name,
     quarter_seconds_remaining, score_differential, turnover, penalty, penalty_yards, first_down,
-    wp, wpa, air_epa, yac_epa, comp_air_epa, comp_yac_epa, qb_epa, xyac_epa, series, series_success, sp,
+    wp, wpa, vegas_wp, vegas_wpa,
+    air_epa, yac_epa, comp_air_epa, comp_yac_epa, qb_epa, xyac_epa, series, series_success, sp,
     NULL::VARCHAR AS game_type, NULL::SMALLINT AS yardline, NULL::VARCHAR AS location_raw,
     NULL::DOUBLE AS exp_pts_after, NULL::VARCHAR AS boxscore_url
 FROM fact_plays
@@ -1583,7 +1602,8 @@ SELECT 'pfr', h.game_id, h.play_seq, h.season, CASE WHEN h.game_type = 'REG' THE
     h.penalized_player_id AS penalty_player_id, h.penalized_player AS penalty_player_name,
     NULL, h.posteam_score - h.defteam_score, NULL, h.play_type = 'no_play' OR h.description LIKE '%Penalty on%',
     NULL, NULL,
-    NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+    h.wp, h.wpa, h.vegas_wp, h.vegas_wpa,
+    NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
     h.game_type, h.yardline, h.location_raw, h.exp_pts_after, h.boxscore_url
 FROM fact_historical_plays h
 LEFT JOIN dim_games g ON g.game_id = h.game_id;
