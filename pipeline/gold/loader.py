@@ -190,7 +190,9 @@ def load_dim_games(con: duckdb.DuckDBPyConnection) -> None:
             pff::INTEGER,
             espn,
             ftn::INTEGER,
-            CAST(NULL AS VARCHAR) AS boxscore_url
+            CAST(NULL AS VARCHAR) AS boxscore_url,
+            CAST(NULL AS SMALLINT) AS humidity,
+            CAST(NULL AS INTEGER) AS attendance
         FROM read_parquet('{glob}')
         WHERE game_id IS NOT NULL
     """)
@@ -346,6 +348,8 @@ def load_fact_plays(con: duckdb.DuckDBPyConnection) -> None:
             epa,
             wp,
             wpa,
+            vegas_wp,
+            vegas_wpa,
             air_epa,
             yac_epa,
             comp_air_epa,
@@ -1505,38 +1509,104 @@ def load_ref_team_elo(con: duckdb.DuckDBPyConnection) -> None:
 
 
 def load_historical_games(con: duckdb.DuckDBPyConnection) -> None:
-    """Merge pre-1999 games (1970-1998, from Pro-Football-Reference) into dim_games."""
+    """Merge pre-1999 games (1970-1998, from Pro-Football-Reference) into dim_games,
+    with the Vegas line, over/under, roof, surface and weather (and, where it
+    was scraped, the scorebox: stadium, attendance, start time, coaches) from
+    each game's PFR boxscore page."""
     files = _silver_files("historical_gamelogs")
     if not files:
         console.print("  [yellow]dim_games (historical): no silver files found[/yellow]")
         return
     glob = str(SILVER_DIR / "historical_gamelogs" / "*.parquet")
+    info_files = _silver_files("historical_game_info")
+    if info_files:
+        info = f"read_parquet('{SILVER_DIR / 'historical_game_info' / '*.parquet'}', union_by_name=true)"
+    else:
+        info = ("(SELECT NULL::VARCHAR game_id, NULL::VARCHAR roof, NULL::VARCHAR surface, NULL::SMALLINT temp, "
+                "NULL::SMALLINT humidity, NULL::SMALLINT wind, NULL::VARCHAR favorite, NULL::FLOAT favorite_by, "
+                "NULL::FLOAT total_line, NULL::VARCHAR stadium, NULL::INTEGER attendance, NULL::VARCHAR start_time, "
+                "NULL::VARCHAR team1_pfr, NULL::VARCHAR team1_coach, NULL::VARCHAR team2_pfr, "
+                "NULL::VARCHAR team2_coach WHERE false)")
+    # PFR names teams by full name ("Houston Oilers") or link ("/teams/oti/"),
+    # neither of which maps cleanly onto our codes. Each name is matched to the
+    # one code that played in every game it appears in (that season if that
+    # settles it, else across seasons).
     con.execute(f"""
-        INSERT OR REPLACE INTO dim_games
+        INSERT OR REPLACE INTO dim_games BY NAME
+        WITH g AS (
+            SELECT gl.*, i.* EXCLUDE (game_id, season)
+            FROM read_parquet('{glob}', union_by_name=true) gl
+            LEFT JOIN {info} i USING (game_id)
+            WHERE gl.game_id IS NOT NULL AND gl.season <= 1998
+        ),
+        names AS (
+            SELECT game_id, season, home_team, away_team, favorite AS name FROM g WHERE favorite IS NOT NULL
+            UNION ALL SELECT game_id, season, home_team, away_team, team1_pfr FROM g WHERE team1_pfr IS NOT NULL
+            UNION ALL SELECT game_id, season, home_team, away_team, team2_pfr FROM g WHERE team2_pfr IS NOT NULL
+        ),
+        name_codes AS (
+            SELECT name, season, game_id, home_team AS code FROM names
+            UNION ALL SELECT name, season, game_id, away_team FROM names
+        ),
+        -- Within a season (a franchise keeps its link when it moves: /teams/ram/
+        -- is LA, then STL), falling back to every season for names seen once.
+        season_map AS (
+            SELECT name, season, any_value(code) AS code FROM (
+                SELECT name, season, code, count(DISTINCT game_id) AS n,
+                       (SELECT count(DISTINCT x.game_id) FROM names x WHERE x.name = c.name AND x.season = c.season) AS games
+                FROM name_codes c GROUP BY name, season, code
+            ) WHERE n = games GROUP BY 1, 2 HAVING count(*) = 1
+        ),
+        all_map AS (
+            SELECT name, any_value(code) AS code FROM (
+                SELECT name, code, count(DISTINCT game_id) AS n,
+                       (SELECT count(DISTINCT x.game_id) FROM names x WHERE x.name = c.name) AS games
+                FROM name_codes c GROUP BY name, code
+            ) WHERE n = games GROUP BY 1 HAVING count(*) = 1
+        ),
+        name_map AS (
+            SELECT DISTINCT n.name, n.season, coalesce(s.code, a.code) AS code
+            FROM names n LEFT JOIN season_map s USING (name, season) LEFT JOIN all_map a USING (name)
+        )
         SELECT
-            game_id,
-            season::SMALLINT,
-            week::SMALLINT,
-            game_type,
-            gameday,
-            NULL,           -- gametime
-            home_team,
-            away_team,
-            home_score::SMALLINT,
-            away_score::SMALLINT,
-            result::SMALLINT,
-            total::SMALLINT,
-            NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,  -- overtime..total_line
-            NULL, NULL, NULL, NULL,                                -- div_game..home_rest
-            NULL, NULL, NULL, NULL, NULL, NULL,                    -- moneyline/spread/odds
-            NULL, NULL, NULL, NULL, NULL, NULL,                    -- qb_id..home_coach
-            NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,  -- referee..ftn
-            boxscore_url
-        FROM read_parquet('{glob}', union_by_name=true)
-        WHERE game_id IS NOT NULL AND season <= 1998
+            g.game_id,
+            g.season::SMALLINT AS season,
+            g.week::SMALLINT AS week,
+            g.game_type,
+            g.gameday,
+            dayname(g.gameday) AS weekday,
+            g.start_time AS gametime,
+            g.home_team,
+            g.away_team,
+            g.home_score::SMALLINT AS home_score,
+            g.away_score::SMALLINT AS away_score,
+            g.result::SMALLINT AS result,
+            g.total::SMALLINT AS total,
+            g.stadium,
+            g.roof,
+            g.surface,
+            g.temp,
+            g.wind,
+            g.humidity,
+            g.attendance,
+            -- nflverse convention: positive = home team favored.
+            CASE WHEN g.favorite_by = 0 THEN 0
+                 WHEN fav.code = g.home_team THEN g.favorite_by
+                 WHEN fav.code = g.away_team THEN -g.favorite_by END AS spread_line,
+            g.total_line,
+            CASE WHEN t1.code = g.home_team THEN g.team1_coach
+                 WHEN t2.code = g.home_team THEN g.team2_coach END AS home_coach,
+            CASE WHEN t1.code = g.away_team THEN g.team1_coach
+                 WHEN t2.code = g.away_team THEN g.team2_coach END AS away_coach,
+            g.boxscore_url
+        FROM g
+        LEFT JOIN name_map fav ON fav.name = g.favorite AND fav.season = g.season
+        LEFT JOIN name_map t1 ON t1.name = g.team1_pfr AND t1.season = g.season
+        LEFT JOIN name_map t2 ON t2.name = g.team2_pfr AND t2.season = g.season
     """)
-    n = con.execute("SELECT COUNT(*) FROM dim_games WHERE season <= 1998").fetchone()[0]
-    console.print(f"  [green]✓[/green] dim_games (historical 1970-1998): {n:,} rows")
+    n, lines = con.execute(
+        "SELECT COUNT(*), COUNT(spread_line) FROM dim_games WHERE season <= 1998").fetchone()
+    console.print(f"  [green]✓[/green] dim_games (historical 1970-1998): {n:,} rows, {lines:,} with a Vegas line")
 
 
 _SCORING_COLUMNS = [
@@ -1827,6 +1897,15 @@ def load_fact_historical_plays(con: duckdb.DuckDBPyConnection) -> None:
     _match_historical_player_ids(con)
 
 
+def load_historical_win_probability(con: duckdb.DuckDBPyConnection) -> None:
+    """Fill fact_historical_plays.wp/wpa/vegas_wp/vegas_wpa from our model
+    (needs dim_games and ref_team_elo loaded first)."""
+    from pipeline.gold.win_probability import derive_historical_wp
+
+    n = derive_historical_wp(con)
+    console.print(f"  [green]✓[/green] fact_historical_plays win probability: {n:,} plays")
+
+
 def _derive_historical_play_fields(con: duckdb.DuckDBPyConnection) -> None:
     """Fill the fields fact_plays has that PFR doesn't give directly: the
     score before the play (PFR's is after it) by team with the ball, and
@@ -1958,6 +2037,7 @@ LOADERS = [
     ("ref_qbr_season", load_ref_qbr_season),
     ("ref_qbr_week", load_ref_qbr_week),
     ("ref_team_elo", load_ref_team_elo),
+    ("historical win probability", load_historical_win_probability),
     # PBP last — largest tables
     ("fact_plays", load_fact_plays),
     ("fact_pass_plays", load_fact_pass_plays),

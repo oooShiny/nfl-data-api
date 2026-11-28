@@ -28,7 +28,7 @@ GET /v1/games/head-to-head?team1=&team2=&season=&game_type=&top_n=   # matchup h
 ```
 
 ### Plays
-Every play with play-by-play: 1999 on from nflverse, before 1999 from Pro-Football-Reference (1984–1998 so far). Same columns in both eras (`source` says which); pre-1999 rows have no win probability or air yards, and their EP/EPA is PFR's model. Requires `game_id`, `season`, `team` **or** `player_id`. Max 500 per request.
+Every play with play-by-play: 1999 on from nflverse, before 1999 from Pro-Football-Reference (1984–1998 so far). Same columns in both eras (`source` says which); pre-1999 rows have no air yards, their EP/EPA is PFR's model, and their win probability (`wp`, and `vegas_wp` with the pregame spread) is ours: a model fit on 1999+ plays, within 0.002 log loss of nflfastR's on held-out seasons (see `scripts/fit_wp_model.py`). Requires `game_id`, `season`, `team` **or** `player_id`. Max 500 per request.
 ```
 GET /v1/plays?game_id=&season=&week=&season_type=&team=&posteam=&play_type=&player_id=
 ```
@@ -128,7 +128,7 @@ Sourced from [nflverse-data](https://github.com/nflverse/nflverse-data) public r
 |---|---|---|
 | `dim_players` | 25K | Player bio/draft info plus cross-reference IDs (gsis, esb, pfr, pff, sleeper, sportradar, yahoo, rotowire, fantasy_data) |
 | `dim_teams` | 36 | Team names, conference/division, colors, logos |
-| `dim_games` | 14K | Game results 1970-present; for 1999+ also schedule, stadium/weather, betting lines (spread/total/moneyline/odds), starting QBs, coaches, referee, rest days, cross-reference IDs |
+| `dim_games` | 14K | Game results 1970-present; for 1999+ also schedule, stadium/weather, betting lines (spread/total/moneyline/odds), starting QBs, coaches, referee, rest days, cross-reference IDs. Before 1999, Vegas line, over/under, roof, surface, temperature, wind and humidity from PFR boxscore pages (filled in as they are scraped), plus attendance, stadium, start time and coaches where the scorebox was saved |
 | `fact_game_scoring` | 106K | One row per scoring play (try folded into the TD), 1970-present: PFR scoring summaries through part of 2007 (`source = 'pfr'`), then derived from nflverse play-by-play (`source = 'nflverse'`). Same PFR-style description for both, plus structured scoring type/method, yards, scorer, passer and try fields (gsis_ids on nflverse rows). For 1999+, `fact_plays` is the richer source |
 | `ref_team_elo` | 17.4K | FiveThirtyEight game-by-game Elo and QB-Elo ratings, win probabilities, starting QBs, 1920-2022 |
 
@@ -140,7 +140,7 @@ Sourced from [nflverse-data](https://github.com/nflverse/nflverse-data) public r
 | `fact_pass_plays` | 524K | Pass-specific detail: passer/receiver, air yards, YAC, completion, CPOE |
 | `fact_rush_plays` | 385K | Rush-specific detail: rusher, run location/gap, TDs |
 | `fact_kick_plays` | 314K | Punts, field goals, extra points, kickoffs, returns |
-| `fact_historical_plays` | 602K | Pre-1999 play-by-play from Pro-Football-Reference (1984–1998 so far, back-filled one season at a time): down/distance, field position, score, description, PFR expected points, play type/yards/TD/player names parsed from the description with gsis_ids matched through rosters, and the team with the ball and drive number (inferred) |
+| `fact_historical_plays` | 602K | Pre-1999 play-by-play from Pro-Football-Reference (1984–1998 so far, back-filled one season at a time): down/distance, field position, score, description, PFR expected points, play type/yards/TD/player names parsed from the description with gsis_ids matched through rosters, the team with the ball and drive number (inferred), and win probability (our model, `wp`/`vegas_wp`) |
 | `fact_pbp_participation` | 486K | Personnel groupings, formations, pass rush/coverage detail per play (2016+) |
 | `fact_ftn_charting` | 185K | Play-design charting — motion, play-action, RPO, blitz, pressure, drops (2022+) |
 

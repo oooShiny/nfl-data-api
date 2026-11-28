@@ -31,9 +31,15 @@
 //   node scripts/scrape-pfr-pbp.mjs              # 1998 down to 1970
 //   node scripts/scrape-pfr-pbp.mjs 1998 1998    # just 1998
 //   node scripts/scrape-pfr-pbp.mjs 1998 1998 --limit 2   # smoke test
+//   node scripts/scrape-pfr-pbp.mjs 1998 1984 --boxscores-only
+//     Re-fetch only the boxscore JSON (game info, scorebox, other tables) for
+//     games whose JSON has no "_scorebox" (pages scraped before Nov 28 2026:
+//     1984-1998). Leaves the play-by-play CSVs alone
+//     and logs no season markers. Same pace; never run it alongside the
+//     normal scrape.
 
 import { spawnSync } from 'child_process';
-import { writeFileSync, existsSync, mkdirSync, renameSync, appendFileSync } from 'fs';
+import { writeFileSync, readFileSync, existsSync, mkdirSync, renameSync, appendFileSync } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -47,6 +53,8 @@ const BOX_DIR = process.env.BOXSCORE_OUT_DIR || path.join(ROOT, 'data', 'scraped
 const args = process.argv.slice(2);
 const limitIdx = args.indexOf('--limit');
 const LIMIT = limitIdx >= 0 ? Number(args.splice(limitIdx, 2)[1]) : Infinity;
+const boxIdx = args.indexOf('--boxscores-only');
+const BOXSCORES_ONLY = boxIdx >= 0 && args.splice(boxIdx, 1).length > 0;
 const FROM = Number(args[0] || 1998);
 const TO = Number(args[1] || 1970);
 
@@ -237,6 +245,15 @@ async function main() {
     try {
       const { pageLoaded, pbpPresent, rows, tables } = await scrapeBoxscore(g.boxscore_url);
       if (rows.length === 0 && !pageLoaded) throw new Error('page did not finish loading (no scoring table)');
+      if (BOXSCORES_ONLY) {
+        if (!pageLoaded || !tables || !tables._scorebox) throw new Error('page did not finish loading (no scorebox)');
+        const boxDir = path.join(BOX_DIR, String(season));
+        mkdirSync(boxDir, { recursive: true });
+        writeAtomic(path.join(boxDir, `${g.game_id}.json`), JSON.stringify(tables));
+        process.stdout.write(` boxscore saved, ${Object.keys(tables).length} tables\n`);
+        consecutiveErrors = 0;
+        return true;
+      }
       if (rows.length === 0 && pbpPresent) throw new Error('pbp table present but empty (page not fully rendered)');
       const saveTables = () => {
         if (!tables || Object.keys(tables).length === 0) return;
@@ -305,7 +322,11 @@ async function main() {
     const dir = path.join(OUT_DIR, String(season));
     mkdirSync(dir, { recursive: true });
     const games = seasonGames(season);
-    const todo = games.filter(
+    const hasScorebox = (g) => {
+      const f = path.join(BOX_DIR, String(season), `${g.game_id}.json`);
+      return existsSync(f) && Object.hasOwn(JSON.parse(readFileSync(f, 'utf8')), '_scorebox');
+    };
+    const todo = BOXSCORES_ONLY ? games.filter((g) => !hasScorebox(g)) : games.filter(
       (g) => !existsSync(path.join(dir, `${g.game_id}.csv`)) && !existsSync(path.join(dir, `${g.game_id}.none`)),
     );
     console.log(`\n[${ts()}] === ${season}: ${games.length} games, ${todo.length} to fetch ===`);
@@ -337,7 +358,9 @@ async function main() {
     const missing = games.filter(
       (g) => !existsSync(path.join(dir, `${g.game_id}.csv`)) && !existsSync(path.join(dir, `${g.game_id}.none`)),
     ).length;
-    if (missing) {
+    if (BOXSCORES_ONLY) {
+      console.log(`  [${ts()}] ${season} boxscores: ${games.filter((g) => !hasScorebox(g)).length} still missing`);
+    } else if (missing) {
       console.log(`  [${ts()}] SEASON_INCOMPLETE ${season}: ${missing} games missing`);
     } else {
       await sleep(BOX_DELAY_MS + Math.random() * BOX_JITTER_MS);

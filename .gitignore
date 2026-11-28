@@ -9,6 +9,7 @@ data/bronze/*
 !data/bronze/historical_gamelogs/
 !data/bronze/historical_scoring/
 !data/bronze/historical_pbp/
+!data/bronze/historical_game_info/
 
 # Virtual environment
 /.venv/

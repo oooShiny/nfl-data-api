@@ -58,7 +58,8 @@ SCORING_MAX_SEASON = 2007
 # Per-game play-by-play CSVs written by scripts/scrape-pfr-pbp.mjs (gitignored);
 # complete seasons are imported into committed bronze parquet.
 SCRAPED_PBP_DIR = DATA_DIR / "scraped" / "pfr_pbp"
-LOCAL_TAGS = ["historical_gamelogs", "historical_scoring", "historical_pbp", "nfl_elo"]
+SCRAPED_BOXSCORE_DIR = DATA_DIR / "scraped" / "pfr_boxscore"
+LOCAL_TAGS = ["historical_gamelogs", "historical_scoring", "historical_pbp", "historical_game_info", "nfl_elo"]
 
 # FiveThirtyEight game-by-game Elo/QB-Elo ratings, 1920-2022. The original
 # projects.fivethirtyeight.com host was decommissioned (ABC News/Disney shut

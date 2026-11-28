@@ -21,7 +21,7 @@ echo "== import / clean / load $season"
 uv run nfl ingest-historical | tail -3
 [[ -f data/bronze/historical_pbp/$season.parquet ]] || { echo "no bronze file for $season (season incomplete?)"; exit 1; }
 uv run nfl clean historical_pbp --force | tail -2
-uv run nfl load fact_historical_plays "historical season stats" | tail -5
+uv run nfl load "dim_games (historical)" fact_historical_plays "historical season stats" "historical win probability" | tail -6
 
 echo; echo "== play-by-play check"
 uv run --quiet python scripts/check_historical_pbp.py | sed -n "1p;/^ *$season /p"
