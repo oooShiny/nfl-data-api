@@ -42,6 +42,11 @@ from pipeline.silver.pfr_pbp_parser import parse_detail
     ("Kerry Collins spiked the ball", {"play_type": "qb_spike", "passer": "Kerry Collins"}),
     ("John Kasay kicks off 71 yards, returned by Tim Dwight for 19 yards",
      {"play_type": "kickoff", "kicker": "John Kasay", "returner": "Tim Dwight"}),
+    # 1980s text: the tackle before the return, or no kick at all.
+    ("Neil O'Donoghue kicks off 58 yards, (tackle by Neil O'Donoghue) returned by Gary Allen for 34 yards",
+     {"play_type": "kickoff", "kicker": "Neil O'Donoghue", "returner": "Gary Allen"}),
+    ("returned by Gary Allen for 15 yards (tackle by Joe Hayes)",
+     {"play_type": "kickoff", "kicker": None, "returner": "Gary Allen", "tackler_1": "Joe Hayes"}),
     ("Jason Elam 63 yard field goal good", {"play_type": "field_goal", "kicker": "Jason Elam"}),
     ("Penalty on Bob Whitfield: False Start, 4 yards (accepted)",
      {"play_type": "no_play", "penalized_player": "Bob Whitfield"}),
