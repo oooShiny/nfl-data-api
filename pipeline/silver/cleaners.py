@@ -236,6 +236,16 @@ def _clean_historical_gamelogs(df: pl.DataFrame) -> pl.DataFrame:
         .otherwise((pl.lit(max_week) - pl.col("week")).replace(playoff_labels, default=pl.lit("POST")))
         .alias("game_type")
     )
+    # 1982 (strike season): the source puts the last regular-season week
+    # (Jan 2-3, 1983) in week 17 with the Wild Card round (Jan 8-9). Keep the
+    # week numbers (and so the game_ids) but label those 14 games REG.
+    if season == 1982:
+        df = df.with_columns(
+            pl.when((pl.col("week") == 17) & (pl.col("event_date") < "1983-01-08"))
+            .then(pl.lit("REG"))
+            .otherwise(pl.col("game_type"))
+            .alias("game_type")
+        )
 
     df = df.with_columns(
         (

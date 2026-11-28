@@ -28,7 +28,7 @@ GET /v1/games/head-to-head?team1=&team2=&season=&game_type=&top_n=   # matchup h
 ```
 
 ### Plays
-Every play with play-by-play: 1999 on from nflverse, before 1999 from Pro-Football-Reference (1983–1998 so far). Same columns in both eras (`source` says which); pre-1999 rows have no air yards, their EP/EPA is PFR's model, and their win probability (`wp`, and `vegas_wp` with the pregame spread) is ours: a model fit on 1999+ plays, within 0.002 log loss of nflfastR's on held-out seasons (see `scripts/fit_wp_model.py`). Requires `game_id`, `season`, `team` **or** `player_id`. Max 500 per request.
+Every play with play-by-play: 1999 on from nflverse, before 1999 from Pro-Football-Reference (1982–1998 so far). Same columns in both eras (`source` says which); pre-1999 rows have no air yards, their EP/EPA is PFR's model, and their win probability (`wp`, and `vegas_wp` with the pregame spread) is ours: a model fit on 1999+ plays, within 0.002 log loss of nflfastR's on held-out seasons (see `scripts/fit_wp_model.py`). Requires `game_id`, `season`, `team` **or** `player_id`. Max 500 per request.
 ```
 GET /v1/plays?game_id=&season=&week=&season_type=&team=&posteam=&play_type=&player_id=
 ```
@@ -140,7 +140,7 @@ Sourced from [nflverse-data](https://github.com/nflverse/nflverse-data) public r
 | `fact_pass_plays` | 524K | Pass-specific detail: passer/receiver, air yards, YAC, completion, CPOE |
 | `fact_rush_plays` | 385K | Rush-specific detail: rusher, run location/gap, TDs |
 | `fact_kick_plays` | 314K | Punts, field goals, extra points, kickoffs, returns |
-| `fact_historical_plays` | 642K | Pre-1999 play-by-play from Pro-Football-Reference (1983–1998 so far, back-filled one season at a time): down/distance, field position, score, description, PFR expected points, play type/yards/TD/player names parsed from the description with gsis_ids matched through rosters, the team with the ball and drive number (inferred), and win probability (our model, `wp`/`vegas_wp`) |
+| `fact_historical_plays` | 666K | Pre-1999 play-by-play from Pro-Football-Reference (1982–1998 so far, back-filled one season at a time): down/distance, field position, score, description, PFR expected points, play type/yards/TD/player names parsed from the description with gsis_ids matched through rosters, the team with the ball and drive number (inferred), and win probability (our model, `wp`/`vegas_wp`) |
 | `fact_pbp_participation` | 486K | Personnel groupings, formations, pass rush/coverage detail per play (2016+) |
 | `fact_ftn_charting` | 185K | Play-design charting — motion, play-action, RPO, blitz, pressure, drops (2022+) |
 
