@@ -1891,6 +1891,12 @@ def load_fact_historical_plays(con: duckdb.DuckDBPyConnection) -> None:
         FROM read_parquet('{glob}', union_by_name=true)
         WHERE game_id IS NOT NULL AND season <= 1998
     """)
+    # The scraped pages carry the game type dim_games had when they were
+    # scraped; take today's (e.g. the 1982 fix in the gamelog cleaner).
+    con.execute("""
+        UPDATE fact_historical_plays p SET game_type = g.game_type
+        FROM dim_games g WHERE g.game_id = p.game_id AND g.game_type IS NOT NULL AND g.game_type IS DISTINCT FROM p.game_type
+    """)
     _derive_historical_play_fields(con)
     n = con.execute("SELECT COUNT(*) FROM fact_historical_plays").fetchone()[0]
     console.print(f"  [green]✓[/green] fact_historical_plays: {n:,} rows")
