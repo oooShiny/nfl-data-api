@@ -28,7 +28,7 @@ GET /v1/games/head-to-head?team1=&team2=&season=&game_type=&top_n=   # matchup h
 ```
 
 ### Plays
-Every play with play-by-play: 1999 on from nflverse, before 1999 from Pro-Football-Reference (1985–1998 so far). Same columns in both eras (`source` says which); pre-1999 rows have no win probability or air yards, and their EP/EPA is PFR's model. Requires `game_id`, `season`, `team` **or** `player_id`. Max 500 per request.
+Every play with play-by-play: 1999 on from nflverse, before 1999 from Pro-Football-Reference (1984–1998 so far). Same columns in both eras (`source` says which); pre-1999 rows have no win probability or air yards, and their EP/EPA is PFR's model. Requires `game_id`, `season`, `team` **or** `player_id`. Max 500 per request.
 ```
 GET /v1/plays?game_id=&season=&week=&season_type=&team=&posteam=&play_type=&player_id=
 ```
@@ -140,7 +140,7 @@ Sourced from [nflverse-data](https://github.com/nflverse/nflverse-data) public r
 | `fact_pass_plays` | 524K | Pass-specific detail: passer/receiver, air yards, YAC, completion, CPOE |
 | `fact_rush_plays` | 385K | Rush-specific detail: rusher, run location/gap, TDs |
 | `fact_kick_plays` | 314K | Punts, field goals, extra points, kickoffs, returns |
-| `fact_historical_plays` | 561K | Pre-1999 play-by-play from Pro-Football-Reference (1985–1998 so far, back-filled one season at a time): down/distance, field position, score, description, PFR expected points, play type/yards/TD/player names parsed from the description with gsis_ids matched through rosters, and the team with the ball and drive number (inferred) |
+| `fact_historical_plays` | 602K | Pre-1999 play-by-play from Pro-Football-Reference (1984–1998 so far, back-filled one season at a time): down/distance, field position, score, description, PFR expected points, play type/yards/TD/player names parsed from the description with gsis_ids matched through rosters, and the team with the ball and drive number (inferred) |
 | `fact_pbp_participation` | 486K | Personnel groupings, formations, pass rush/coverage detail per play (2016+) |
 | `fact_ftn_charting` | 185K | Play-design charting — motion, play-action, RPO, blitz, pressure, drops (2022+) |
 
@@ -153,8 +153,8 @@ Sourced from [nflverse-data](https://github.com/nflverse/nflverse-data) public r
 | `fact_player_game_stats` | 134K | Weekly passing/rushing/receiving box-score stats, advanced metrics (EPA, PACR, DAKOTA, RACR, target/air-yards share, WOPR), fantasy points |
 | `fact_player_season_stats` | 12K | Season-total player stats — adds defense, special teams, and kicking to the weekly stats above |
 | `ref_team_stats` | 1.5K | Season-total team offense/defense box scores (REG, POST, and REG+POST) |
-| `fact_historical_player_game_stats` | 114K | Pre-1999 player game lines derived from `fact_historical_plays` (`source = 'pfr_pbp'`): passing, rushing, receiving, fumbles, defense (sacks, interceptions, forced fumbles, recoveries; no tackles), kicking, punting, returns |
-| `fact_historical_player_season_stats` | 20K | Season totals of those game lines, checked against PFR's official season tables |
+| `fact_historical_player_game_stats` | 123K | Pre-1999 player game lines derived from `fact_historical_plays` (`source = 'pfr_pbp'`): passing, rushing, receiving, fumbles, defense (sacks, interceptions, forced fumbles, recoveries; no tackles), kicking, punting, returns |
+| `fact_historical_player_season_stats` | 22K | Season totals of those game lines, checked against PFR's official season tables |
 | `fact_historical_team_season_stats` | 406 | Pre-1999 team passing/rushing season totals, same source |
 | `fact_snap_counts` | 325K | Offense/defense/special-teams snap counts and percentages per player per game |
 | `fact_ngs_passing` | 5.9K | NFL Next Gen Stats — time to throw, air yards, CPOE (2016+) |

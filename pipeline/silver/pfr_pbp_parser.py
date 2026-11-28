@@ -50,10 +50,15 @@ PASS_COMPLETE_RE = re.compile(
 )
 PASS_INCOMPLETE_RE = re.compile(rf"^(?P<passer>{NAME}) pass incomplete(?: intended for (?P<receiver>{NAME}))?")
 RUSH_RE = re.compile(rf"^(?P<p>{NAME})\s*(?:[a-z][a-z' ]*?\s)?{YARDS}(?P<td>, touchdown)?")
-KICKOFF_RE = re.compile(
-    rf"^(?P<p>{NAME}) kicks (?:off|onside) (?P<y>\d+) yards?(?:, returned by (?P<returner>{NAME}) for)?"
-)
-PUNT_RE = re.compile(rf"^(?P<p>{NAME}) punts (?P<y>\d+) yards?(?:, returned by (?P<returner>{NAME}) for)?")
+# Some 1980s text puts the tackle before the return:
+# "kicks off 58 yards, (tackle by X) returned by Y for 34 yards".
+_RETURNED_BY = rf"(?:, (?:\(tackle by [^)]*\) )?returned by (?P<returner>{NAME}) for)?"
+KICKOFF_RE = re.compile(rf"^(?P<p>{NAME}) kicks (?:off|onside) (?P<y>\d+) yards?{_RETURNED_BY}")
+# Kickoffs whose text leaves out the kick (mostly 1984-85):
+# "returned by Gary Allen for 15 yards (tackle by Joe Hayes)". Never seen
+# after a punt, which always names the punter.
+KICKOFF_NO_KICKER_RE = re.compile(rf"^(?:\(tackle by [^)]*\) )?returned by (?P<returner>{NAME}) for")
+PUNT_RE = re.compile(rf"^(?P<p>{NAME}) punts (?P<y>\d+) yards?{_RETURNED_BY}")
 FIELD_GOAL_RE = re.compile(
     rf"^(?P<p>{NAME}) (?P<y>\d+) yard field goal (?P<result>good|no good)(?: blocked by (?P<blocker>{NAME}))?"
 )
@@ -74,6 +79,7 @@ _CLASSIFIERS = [
     ("pass_complete", PASS_COMPLETE_RE),
     ("pass_incomplete", PASS_INCOMPLETE_RE),
     ("kickoff", KICKOFF_RE),
+    ("kickoff", KICKOFF_NO_KICKER_RE),
     ("aborted", ABORTED_RE),
     ("punt", PUNT_RE),
     ("field_goal", FIELD_GOAL_RE),
